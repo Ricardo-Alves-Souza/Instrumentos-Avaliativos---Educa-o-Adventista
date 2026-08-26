@@ -1,0 +1,8 @@
+{
+  "name": "Instrumentos Avaliativos",
+  "description": "Sistema de Gestão e Emissão de Instrumentos Avaliativos Escolares com visualização A4 e exportação para impressão.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

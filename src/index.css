@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    color: #1a1a1a;
+    background-color: #f3f4f6;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Specific Print and A4 Sheet Simulation Styles */
+@page {
+  size: A4 portrait;
+  margin: 12mm 14mm;
+}
+
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11pt;
+    width: 100% !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+  }
+
+  #root, div, main, section, article {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-page-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: transparent !important;
+    transform: none !important;
+  }
+
+  /* Reset any transform applied by preview zoom */
+  [style*="transform"] {
+    transform: none !important;
+  }
+
+  /* Force background colors and borders in print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .break-after-avoid {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Fix for first page: ensure no artificial top spacing or page breaks */
+  .print-doc-root {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }
+}
+
+/* Dotted leader line helper for evaluation criteria */
+.dotted-leader {
+  flex: 1;
+  border-bottom: 1px dotted #e5e7eb;
+  margin: 0 8px;
+  transform: translateY(-3px);
+}

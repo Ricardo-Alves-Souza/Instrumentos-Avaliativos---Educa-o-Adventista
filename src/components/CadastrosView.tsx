@@ -1,0 +1,698 @@
+import React, { useState } from 'react';
+import {
+  GraduationCap,
+  BookOpen,
+  Plus,
+  Trash2,
+  Edit2,
+  ArrowUp,
+  ArrowDown,
+  Search,
+  CheckCircle2,
+  X,
+  Layers,
+  Filter,
+  AlertCircle,
+} from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { Disciplina, Turma } from '../types';
+import { ConfirmModal } from './ConfirmModal';
+
+export const CadastrosView: React.FC = () => {
+  const {
+    turmas,
+    addTurma,
+    updateTurma,
+    deleteTurma,
+    disciplinas,
+    addDisciplina,
+    updateDisciplina,
+    deleteDisciplina,
+    moveDisciplinaOrder,
+    currentUser,
+  } = useApp();
+
+  const [activeSubTab, setActiveSubTab] = useState<'disciplinas' | 'turmas'>('disciplinas');
+
+  // Search and Filters
+  const [searchDisc, setSearchDisc] = useState('');
+  const [searchTurma, setSearchTurma] = useState('');
+  const [filterNivel, setFilterNivel] = useState<string>('all');
+  const [filterTurno, setFilterTurno] = useState<string>('all');
+
+  // Disciplina Modal State
+  const [isDiscModalOpen, setIsDiscModalOpen] = useState(false);
+  const [editingDisc, setEditingDisc] = useState<Disciplina | null>(null);
+  const [discNome, setDiscNome] = useState('');
+  const [discCodigo, setDiscCodigo] = useState('');
+  const [discOrdem, setDiscOrdem] = useState<number>(1);
+  const [isSavingDisc, setIsSavingDisc] = useState(false);
+  const [discError, setDiscError] = useState<string | null>(null);
+
+  // Turma Modal State
+  const [isTurmaModalOpen, setIsTurmaModalOpen] = useState(false);
+  const [editingTurma, setEditingTurma] = useState<Turma | null>(null);
+  const [turmaNome, setTurmaNome] = useState('');
+  const [turmaSerie, setTurmaSerie] = useState('1º Ano');
+  const [turmaNivel, setTurmaNivel] = useState('Ensino Fundamental I');
+  const [turmaTurno, setTurmaTurno] = useState<'Manhã' | 'Tarde'>('Manhã');
+  const [isSavingTurma, setIsSavingTurma] = useState(false);
+  const [turmaError, setTurmaError] = useState<string | null>(null);
+
+  // Confirm Delete Modals
+  const [deletingDisc, setDeletingDisc] = useState<Disciplina | null>(null);
+  const [isDeletingDisc, setIsDeletingDisc] = useState(false);
+  const [deletingTurma, setDeletingTurma] = useState<Turma | null>(null);
+  const [isDeletingTurma, setIsDeletingTurma] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+
+  const isAuthorized = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR';
+
+  // Open Disciplina Modal for Create or Edit
+  const handleOpenDiscModal = (disc?: Disciplina) => {
+    setDiscError(null);
+    if (disc) {
+      setEditingDisc(disc);
+      setDiscNome(disc.nome);
+      setDiscCodigo(disc.codigo);
+      setDiscOrdem(disc.ordem);
+    } else {
+      setEditingDisc(null);
+      setDiscNome('');
+      setDiscCodigo('');
+      setDiscOrdem(disciplinas.length + 1);
+    }
+    setIsDiscModalOpen(true);
+  };
+
+  const handleSaveDisc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!discNome.trim() || !discCodigo.trim()) return;
+
+    try {
+      setIsSavingDisc(true);
+      setDiscError(null);
+      if (editingDisc) {
+        await updateDisciplina({
+          ...editingDisc,
+          nome: discNome.trim(),
+          codigo: discCodigo.trim().toUpperCase(),
+          ordem: Number(discOrdem),
+        });
+      } else {
+        await addDisciplina({
+          nome: discNome.trim(),
+          codigo: discCodigo.trim().toUpperCase(),
+        });
+      }
+      setIsDiscModalOpen(false);
+    } catch (err: any) {
+      setDiscError(err?.message || 'Erro ao salvar disciplina.');
+    } finally {
+      setIsSavingDisc(false);
+    }
+  };
+
+  // Open Turma Modal for Create or Edit
+  const handleOpenTurmaModal = (t?: Turma) => {
+    setTurmaError(null);
+    if (t) {
+      setEditingTurma(t);
+      setTurmaNome(t.nome);
+      setTurmaSerie(t.serie);
+      setTurmaNivel(t.nivel);
+      setTurmaTurno(t.turno);
+    } else {
+      setEditingTurma(null);
+      setTurmaNome('');
+      setTurmaSerie('1º Ano');
+      setTurmaNivel('Ensino Fundamental I');
+      setTurmaTurno('Manhã');
+    }
+    setIsTurmaModalOpen(true);
+  };
+
+  const handleSaveTurma = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!turmaNome.trim()) return;
+
+    try {
+      setIsSavingTurma(true);
+      setTurmaError(null);
+      if (editingTurma) {
+        await updateTurma({
+          ...editingTurma,
+          nome: turmaNome.trim(),
+          serie: turmaSerie,
+          nivel: turmaNivel,
+          turno: turmaTurno,
+        });
+      } else {
+        await addTurma({
+          nome: turmaNome.trim(),
+          serie: turmaSerie,
+          nivel: turmaNivel,
+          turno: turmaTurno,
+          anoLetivo: new Date().getFullYear(),
+        });
+      }
+      setIsTurmaModalOpen(false);
+    } catch (err: any) {
+      setTurmaError(err?.message || 'Erro ao salvar turma.');
+    } finally {
+      setIsSavingTurma(false);
+    }
+  };
+
+  const handleConfirmDeleteDisc = async () => {
+    if (!deletingDisc) return;
+    try {
+      setIsDeletingDisc(true);
+      setGeneralError(null);
+      await deleteDisciplina(deletingDisc.id);
+      setDeletingDisc(null);
+    } catch (err: any) {
+      setGeneralError(err?.message || 'Erro ao excluir disciplina no Supabase.');
+    } finally {
+      setIsDeletingDisc(false);
+    }
+  };
+
+  const handleConfirmDeleteTurma = async () => {
+    if (!deletingTurma) return;
+    try {
+      setIsDeletingTurma(true);
+      setGeneralError(null);
+      await deleteTurma(deletingTurma.id);
+      setDeletingTurma(null);
+    } catch (err: any) {
+      setGeneralError(err?.message || 'Erro ao excluir turma no Supabase.');
+    } finally {
+      setIsDeletingTurma(false);
+    }
+  };
+
+  // Filtered lists
+  const filteredDisciplinas = disciplinas.filter(
+    (d) =>
+      d.nome.toLowerCase().includes(searchDisc.toLowerCase()) ||
+      d.codigo.toLowerCase().includes(searchDisc.toLowerCase())
+  );
+
+  const filteredTurmas = turmas.filter((t) => {
+    const matchSearch =
+      t.nome.toLowerCase().includes(searchTurma.toLowerCase()) ||
+      t.serie.toLowerCase().includes(searchTurma.toLowerCase());
+    const matchNivel = filterNivel === 'all' || t.nivel === filterNivel;
+    const matchTurno = filterTurno === 'all' || t.turno === filterTurno;
+    return matchSearch && matchNivel && matchTurno;
+  });
+
+  return (
+    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-[#111827] tracking-tight">
+            Cadastros Gerais
+          </h1>
+          <p className="text-xs text-[#6B7280] mt-0.5">
+            Gerencie a matriz curricular oficial, turmas, séries e ordem acadêmica de precedência.
+          </p>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex items-center bg-[#E5E7EB]/60 p-1 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('disciplinas')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              activeSubTab === 'disciplinas'
+                ? 'bg-white text-[#111827] shadow-xs'
+                : 'text-[#6B7280] hover:text-[#111827]'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-[#3B82F6]" />
+            <span>Disciplinas ({disciplinas.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('turmas')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              activeSubTab === 'turmas'
+                ? 'bg-white text-[#111827] shadow-xs'
+                : 'text-[#6B7280] hover:text-[#111827]'
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5 text-[#3B82F6]" />
+            <span>Turmas ({turmas.length})</span>
+          </button>
+        </div>
+      </div>
+
+      {/* DISCIPLINAS SUB-TAB */}
+      {activeSubTab === 'disciplinas' && (
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-xl border border-[#E5E7EB] shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar disciplina por nome ou código..."
+                value={searchDisc}
+                onChange={(e) => setSearchDisc(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
+              />
+            </div>
+
+            {isAuthorized && (
+              <button
+                type="button"
+                onClick={() => handleOpenDiscModal()}
+                className="inline-flex items-center gap-2 bg-[#111827] hover:bg-[#1f2937] text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nova Disciplina</span>
+              </button>
+            )}
+          </div>
+
+          <div className="bg-white border border-[#E5E7EB] rounded-xl shadow-xs overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#F3F4F6] bg-[#F9FAFB]/50 flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#111827]">
+                  Matriz Curricular & Ordem de Precedência
+                </h3>
+                <p className="text-[11px] text-[#6B7280] mt-0.5">
+                  A ordem abaixo define a sequência exata de exibição dos instrumentos no PDF oficial.
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-[#3B82F6] bg-[#EFF6FF] px-2.5 py-1 rounded-full border border-[#DBEAFE]">
+                {filteredDisciplinas.length} disciplinas
+              </span>
+            </div>
+
+            <div className="divide-y divide-[#F3F4F6]">
+              {filteredDisciplinas.map((disc, idx) => (
+                <div
+                  key={disc.id}
+                  className="p-4 flex items-center justify-between hover:bg-[#F9FAFB] transition-colors gap-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[#F3F4F6] text-[#111827] font-bold text-xs flex items-center justify-center border border-[#E5E7EB] shrink-0 font-mono">
+                      {String(disc.ordem).padStart(2, '0')}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-[#111827]">{disc.nome}</h4>
+                      <p className="text-[11px] text-[#6B7280] font-mono">
+                        Código: {disc.codigo} · Posição #{disc.ordem}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {isAuthorized && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => moveDisciplinaOrder(disc.id, 'up')}
+                          disabled={idx === 0}
+                          className="p-1.5 text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded-md disabled:opacity-30 cursor-pointer transition-colors"
+                          title="Mover para cima na precedência"
+                        >
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveDisciplinaOrder(disc.id, 'down')}
+                          disabled={idx === filteredDisciplinas.length - 1}
+                          className="p-1.5 text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded-md disabled:opacity-30 cursor-pointer transition-colors"
+                          title="Mover para baixo na precedência"
+                        >
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDiscModal(disc)}
+                          className="p-1.5 text-[#6B7280] hover:text-[#3B82F6] hover:bg-[#EFF6FF] rounded-md cursor-pointer transition-colors"
+                          title="Editar Disciplina"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingDisc(disc)}
+                          className="p-1.5 text-[#6B7280] hover:text-red-600 hover:bg-red-50 rounded-md cursor-pointer transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TURMAS SUB-TAB */}
+      {activeSubTab === 'turmas' && (
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-xl border border-[#E5E7EB] shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 flex-1">
+              <div className="relative min-w-[200px] flex-1">
+                <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar por turma ou série..."
+                  value={searchTurma}
+                  onChange={(e) => setSearchTurma(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-[#111827] focus:outline-none font-medium"
+                />
+              </div>
+
+              <select
+                value={filterNivel}
+                onChange={(e) => setFilterNivel(e.target.value)}
+                className="text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 bg-[#F9FAFB] text-[#111827] font-medium"
+              >
+                <option value="all">Todos os Níveis</option>
+                <option value="Ensino Fundamental I">Ensino Fundamental I (1º ao 5º)</option>
+                <option value="Ensino Fundamental II">Ensino Fundamental II (6º ao 9º)</option>
+                <option value="Ensino Médio">Ensino Médio (1º ao 3º)</option>
+              </select>
+
+              <select
+                value={filterTurno}
+                onChange={(e) => setFilterTurno(e.target.value)}
+                className="text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 bg-[#F9FAFB] text-[#111827] font-medium"
+              >
+                <option value="all">Todos os Turnos</option>
+                <option value="Manhã">Manhã</option>
+                <option value="Tarde">Tarde</option>
+              </select>
+            </div>
+
+            {isAuthorized && (
+              <button
+                type="button"
+                onClick={() => handleOpenTurmaModal()}
+                className="inline-flex items-center gap-2 bg-[#111827] hover:bg-[#1f2937] text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nova Turma</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {filteredTurmas.map((t) => (
+              <div
+                key={t.id}
+                className="bg-white border border-[#E5E7EB] rounded-xl p-4 shadow-xs hover:border-[#3B82F6] transition-all flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className="text-xs font-bold text-[#111827]">{t.nome}</h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      t.turno === 'Manhã'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}>
+                      {t.turno}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#6B7280]">{t.nivel}</p>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-[#F3F4F6] flex items-center justify-between">
+                  <span className="text-[10px] text-[#9CA3AF] font-mono">
+                    Série: {t.serie}
+                  </span>
+                  {isAuthorized && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenTurmaModal(t)}
+                        className="p-1 text-[#6B7280] hover:text-[#3B82F6] hover:bg-[#EFF6FF] rounded cursor-pointer transition-colors"
+                        title="Editar Turma"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeletingTurma(t)}
+                        className="p-1 text-[#6B7280] hover:text-red-600 hover:bg-red-50 rounded cursor-pointer transition-colors"
+                        title="Excluir Turma"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* General Error Banner */}
+      {generalError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between text-xs text-red-700">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{generalError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setGeneralError(null)}
+            className="text-red-500 hover:text-red-700 font-bold ml-2"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* MODAL DISCIPLINA */}
+      {isDiscModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#111827]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-xl border border-[#E5E7EB] overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#F3F4F6] flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[#111827]">
+                {editingDisc ? 'Editar Disciplina' : 'Nova Disciplina'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsDiscModalOpen(false)}
+                className="text-[#9CA3AF] hover:text-[#111827] p-1 rounded-md cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDisc} className="p-6 space-y-4">
+              {discError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>{discError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#374151] mb-1">
+                  Nome da Disciplina
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={discNome}
+                  onChange={(e) => setDiscNome(e.target.value)}
+                  placeholder="Ex: Língua Portuguesa, Robótica..."
+                  className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#374151] mb-1">
+                    Código Abrev.
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={discCodigo}
+                    onChange={(e) => setDiscCodigo(e.target.value)}
+                    placeholder="Ex: POR, MAT"
+                    className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] uppercase font-mono font-bold focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#374151] mb-1">
+                    Ordem de Precedência
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={discOrdem}
+                    onChange={(e) => setDiscOrdem(Number(e.target.value))}
+                    className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] font-mono focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-[#F3F4F6] flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingDisc}
+                  onClick={() => setIsDiscModalOpen(false)}
+                  className="px-4 py-2 text-xs text-[#6B7280] hover:bg-[#F3F4F6] rounded-lg font-medium cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDisc}
+                  className="px-5 py-2 text-xs bg-[#111827] hover:bg-[#1f2937] text-white font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingDisc ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TURMA */}
+      {isTurmaModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#111827]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-xl border border-[#E5E7EB] overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#F3F4F6] flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[#111827]">
+                {editingTurma ? 'Editar Turma' : 'Nova Turma'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsTurmaModalOpen(false)}
+                className="text-[#9CA3AF] hover:text-[#111827] p-1 rounded-md cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTurma} className="p-6 space-y-4">
+              {turmaError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>{turmaError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#374151] mb-1">
+                  Nome da Turma
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={turmaNome}
+                  onChange={(e) => setTurmaNome(e.target.value)}
+                  placeholder="Ex: 4º Ano A - Manhã"
+                  className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#374151] mb-1">
+                    Série
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={turmaSerie}
+                    onChange={(e) => setTurmaSerie(e.target.value)}
+                    placeholder="Ex: 4º Ano"
+                    className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#374151] mb-1">
+                    Turno
+                  </label>
+                  <select
+                    value={turmaTurno}
+                    onChange={(e) => setTurmaTurno(e.target.value as 'Manhã' | 'Tarde')}
+                    className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] font-medium"
+                  >
+                    <option value="Manhã">Manhã</option>
+                    <option value="Tarde">Tarde</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#374151] mb-1">
+                  Nível de Ensino
+                </label>
+                <select
+                  value={turmaNivel}
+                  onChange={(e) => setTurmaNivel(e.target.value)}
+                  className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] font-medium"
+                >
+                  <option value="Ensino Fundamental I">Ensino Fundamental I</option>
+                  <option value="Ensino Fundamental II">Ensino Fundamental II</option>
+                  <option value="Ensino Médio">Ensino Médio</option>
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-[#F3F4F6] flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingTurma}
+                  onClick={() => setIsTurmaModalOpen(false)}
+                  className="px-4 py-2 text-xs text-[#6B7280] hover:bg-[#F3F4F6] rounded-lg font-medium cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingTurma}
+                  className="px-5 py-2 text-xs bg-[#111827] hover:bg-[#1f2937] text-white font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingTurma ? 'Salvando...' : 'Salvar Turma'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DELETE MODALS */}
+      <ConfirmModal
+        isOpen={!!deletingDisc}
+        title="Excluir Disciplina"
+        message={`Tem certeza que deseja excluir permanentemente a disciplina "${deletingDisc?.nome}" (${deletingDisc?.codigo})? Esta ação não pode ser desfeita.`}
+        confirmText="Excluir Disciplina"
+        confirmVariant="danger"
+        isLoading={isDeletingDisc}
+        onClose={() => setDeletingDisc(null)}
+        onConfirm={handleConfirmDeleteDisc}
+      />
+
+      <ConfirmModal
+        isOpen={!!deletingTurma}
+        title="Excluir Turma"
+        message={`Tem certeza que deseja excluir permanentemente a turma "${deletingTurma?.nome}"? Todas as atribuições e referências a esta turma serão removidas.`}
+        confirmText="Excluir Turma"
+        confirmVariant="danger"
+        isLoading={isDeletingTurma}
+        onClose={() => setDeletingTurma(null)}
+        onConfirm={handleConfirmDeleteTurma}
+      />
+    </div>
+  );
+};
