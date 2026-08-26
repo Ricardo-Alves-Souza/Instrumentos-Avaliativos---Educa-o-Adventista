@@ -498,7 +498,7 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
           {activeDocs.map((doc, idx) => (
             <div
               key={doc.turma.id}
-              className="print-page-container w-full bg-white shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-[#E5E7EB] rounded-lg p-8 sm:p-12"
+              className="print-page-container w-full bg-white shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-[#E5E7EB] rounded-lg p-10 sm:p-14"
               style={{ pageBreakBefore: idx > 0 ? 'always' : 'auto' }}
             >
               <PrintDocument
