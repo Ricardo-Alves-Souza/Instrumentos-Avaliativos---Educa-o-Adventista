@@ -6,12 +6,7 @@ import {
   ZoomOut,
   Layers,
   ChevronRight,
-  Sparkles,
-  CheckSquare,
-  Square,
-  Filter,
   GraduationCap,
-  Copy,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PrintDocument } from './print/PrintDocument';
@@ -111,34 +106,6 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
     }
   };
 
-  // Quick Scenarios for testing
-  const loadScenario = (type: 'pais' | 'prof' | 'sem_hab' | 'serie4') => {
-    if (type === 'pais') {
-      setGenerationMode('single');
-      setSelectedTurmaId('turma-4a-m');
-      setSelectedBimestre(systemSettings.bimestreAtual);
-      setSelectedDisciplinaId('all');
-      setIncludeSkills(false);
-    } else if (type === 'prof') {
-      setGenerationMode('single');
-      setSelectedTurmaId('turma-4a-m');
-      setSelectedBimestre(systemSettings.bimestreAtual);
-      setSelectedDisciplinaId('all');
-      setIncludeSkills(true);
-    } else if (type === 'sem_hab') {
-      setGenerationMode('single');
-      setSelectedTurmaId('turma-6a-m');
-      setSelectedBimestre(systemSettings.bimestreAtual);
-      setSelectedDisciplinaId('disc-6');
-      setIncludeSkills(true);
-    } else if (type === 'serie4') {
-      setGenerationMode('batch');
-      setSelectedSerie('4º Ano');
-      setBatchPdfType('consolidated');
-      setIncludeSkills(false);
-    }
-  };
-
   // Helper to map instrument with turma-specific date
   const mapInstrumentForTurma = (inst: any, turmaId: string) => {
     const tEntrega = inst.turmas?.find((t: any) => t.turmaId === turmaId);
@@ -219,9 +186,9 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
   );
 
   return (
-    <div className="flex flex-col lg:flex-row h-full min-h-screen bg-[#F3F4F6]">
-      {/* CONTROL & EXPORT PANEL (Hidden during print via .no-print) */}
-      <aside className="no-print w-full lg:w-[340px] bg-white border-r border-[#E5E7EB] p-6 flex flex-col gap-5 shrink-0 overflow-y-auto shadow-xs">
+    <div className="flex flex-col lg:flex-row h-screen max-h-screen overflow-hidden bg-[#F3F4F6]">
+      {/* CONTROL & EXPORT PANEL (Fixed on screen, only its inner content scrolls if needed) */}
+      <aside className="no-print w-full lg:w-[360px] bg-white border-r border-[#E5E7EB] p-6 flex flex-col gap-5 shrink-0 overflow-y-auto shadow-xs h-auto lg:h-full">
         {/* Title Header */}
         <div>
           <div className="flex items-center gap-1.5 text-xs text-[#6B7280] font-medium mb-1">
@@ -467,8 +434,8 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
           </div>
         </div>
 
-        {/* Action Print Buttons */}
-        <div className="space-y-2">
+        {/* Action Print Button */}
+        <div className="pt-2">
           <button
             id="btn-exportar-pdf"
             type="button"
@@ -479,50 +446,12 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
             <span>Exportar PDF / Imprimir</span>
           </button>
         </div>
-
-        {/* Quick Test Presets */}
-        <div className="border-t border-[#E5E7EB] pt-4 mt-auto">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.08em] mb-2">
-            <Sparkles className="w-3 h-3 text-[#3B82F6]" />
-            Cenários de Teste Rápidos
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={() => loadScenario('pais')}
-              className="text-[10px] text-left p-2 bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] rounded-md text-[#374151] font-medium transition-colors cursor-pointer"
-            >
-              1. Pais (Sem Habilidades)
-            </button>
-            <button
-              type="button"
-              onClick={() => loadScenario('prof')}
-              className="text-[10px] text-left p-2 bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] rounded-md text-[#374151] font-medium transition-colors cursor-pointer"
-            >
-              2. Professores (+ Habilidades)
-            </button>
-            <button
-              type="button"
-              onClick={() => loadScenario('sem_hab')}
-              className="text-[10px] text-left p-2 bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] rounded-md text-[#374151] font-medium transition-colors cursor-pointer"
-            >
-              3. Inst. sem Habilidades
-            </button>
-            <button
-              type="button"
-              onClick={() => loadScenario('serie4')}
-              className="text-[10px] text-left p-2 bg-[#F9FAFB] hover:bg-[#F3F4F6] border border-[#E5E7EB] rounded-md text-[#374151] font-medium transition-colors cursor-pointer"
-            >
-              4. Geração em Massa (4º Ano)
-            </button>
-          </div>
-        </div>
       </aside>
 
-      {/* RIGHT: INTERACTIVE A4 LIVE PREVIEW & PRINT CANVAS */}
-      <main className="flex-1 flex flex-col items-center p-6 lg:p-8 overflow-y-auto">
+      {/* RIGHT: INTERACTIVE A4 LIVE PREVIEW & PRINT CANVAS (Only this section scrolls vertically) */}
+      <main className="flex-1 flex flex-col items-center p-6 lg:p-8 overflow-y-auto h-full">
         {/* Top Preview Toolbar (Hidden in Print) */}
-        <div className="no-print w-full max-w-[210mm] mb-4 flex items-center justify-between bg-white px-4 py-2.5 rounded-lg border border-[#E5E7EB] shadow-xs">
+        <div className="no-print w-full max-w-[210mm] mb-4 flex items-center justify-between bg-white px-4 py-2.5 rounded-lg border border-[#E5E7EB] shadow-xs shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-[#111827]">Pré-visualização A4</span>
             <span className="text-[11px] text-[#6B7280]">
@@ -563,7 +492,7 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
 
         {/* List of A4 Sheets (Single or Multiple Consolidated) */}
         <div
-          className="space-y-8 w-full max-w-[210mm] transition-transform origin-top"
+          className="space-y-8 w-full max-w-[210mm] transition-transform origin-top pb-16"
           style={{ transform: `scale(${zoomScale / 100})` }}
         >
           {activeDocs.map((doc, idx) => (

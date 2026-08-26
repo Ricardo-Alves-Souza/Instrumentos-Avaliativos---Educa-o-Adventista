@@ -12,7 +12,7 @@ export const HeaderPDF: React.FC<HeaderPDFProps> = ({
   turmaNome,
   bimestre,
   anoLetivo,
-  escolaNome = 'Colégio Adventista de Santo Amaro',
+  escolaNome = 'COLÉGIO ADVENTISTA DE SANTO AMARO',
 }) => {
   // Format turma title cleanly (e.g. "Turma 4º Ano A")
   const formattedTurmaNome = turmaNome.toLowerCase().startsWith('turma')
