@@ -53,40 +53,42 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({
   }, [instrumentos, disciplinas]);
 
   return (
-    <div className="print-doc-root w-full bg-white text-slate-800">
-      {/* Institutional Document Header */}
-      <HeaderPDF
-        turmaNome={turmaNome}
-        bimestre={bimestre}
-        anoLetivo={anoLetivo}
-      />
+    <div className="print-doc-root w-full bg-white text-slate-800 flex flex-col flex-1 justify-between">
+      <div>
+        {/* Institutional Document Header */}
+        <HeaderPDF
+          turmaNome={turmaNome}
+          bimestre={bimestre}
+          anoLetivo={anoLetivo}
+        />
 
-      {/* Main Content Area: Disciplinas & Instrumentos */}
-      {instrumentos.length === 0 ? (
-        <div className="text-center py-12 text-slate-400 text-xs border-2 border-dashed border-slate-200 rounded-xl my-4">
-          Nenhum instrumento avaliativo cadastrado para esta turma no {bimestre}º Bimestre ({anoLetivo}).
-        </div>
-      ) : (
-        <main className="space-y-6">
-          {groupedByDisciplina.map((group) => (
-            <section key={group.disciplinaNome} className="w-full break-inside-avoid">
-              {/* Disciplina Category Heading */}
-              <DisciplinaSection disciplinaNome={group.disciplinaNome} />
+        {/* Main Content Area: Disciplinas & Instrumentos */}
+        {instrumentos.length === 0 ? (
+          <div className="text-center py-12 text-slate-400 text-xs border-2 border-dashed border-slate-200 rounded-xl my-4">
+            Nenhum instrumento avaliativo cadastrado para esta turma no {bimestre}º Bimestre ({anoLetivo}).
+          </div>
+        ) : (
+          <main className="space-y-6">
+            {groupedByDisciplina.map((group) => (
+              <section key={group.disciplinaNome} className="w-full break-inside-avoid">
+                {/* Disciplina Category Heading */}
+                <DisciplinaSection disciplinaNome={group.disciplinaNome} />
 
-              {/* List of Evaluation Instruments */}
-              <div className="space-y-4">
-                {group.items.map((instrumento) => (
-                  <InstrumentoCard
-                    key={instrumento.id}
-                    instrumento={instrumento}
-                    includeSkills={includeSkills}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
-        </main>
-      )}
+                {/* List of Evaluation Instruments */}
+                <div className="space-y-4">
+                  {group.items.map((instrumento) => (
+                    <InstrumentoCard
+                      key={instrumento.id}
+                      instrumento={instrumento}
+                      includeSkills={includeSkills}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </main>
+        )}
+      </div>
 
       {/* Institutional Footer */}
       {showFooter && <FooterPDF />}

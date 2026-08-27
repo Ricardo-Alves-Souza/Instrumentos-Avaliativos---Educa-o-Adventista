@@ -492,13 +492,13 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
 
         {/* List of A4 Sheets (Single or Multiple Consolidated) */}
         <div
-          className="space-y-8 w-full max-w-[210mm] transition-transform origin-top pb-16"
+          className="print-sheets-list space-y-8 w-full max-w-[210mm] transition-transform origin-top pb-16"
           style={{ transform: `scale(${zoomScale / 100})` }}
         >
           {activeDocs.map((doc, idx) => (
             <div
               key={doc.turma.id}
-              className="print-page-container w-full bg-white shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-[#E5E7EB] rounded-lg p-10 sm:p-14"
+              className="print-page-container w-full min-h-[297mm] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-[#E5E7EB] rounded-lg p-10 sm:p-14 flex flex-col justify-between"
               style={{ pageBreakBefore: idx > 0 ? 'always' : 'auto' }}
             >
               <PrintDocument
