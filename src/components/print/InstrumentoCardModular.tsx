@@ -52,7 +52,7 @@ export const InstrumentoCardModular: React.FC<InstrumentoCardModularProps> = ({
 
       {/* MÓDULO 1: CABEÇALHO DO INSTRUMENTO */}
       {modules.includes('header') && !isContinuation && (
-        <div className="break-inside-avoid flex flex-wrap items-center justify-between gap-4 mb-5 pb-4 border-b border-[#F3F4F6]">
+        <div className="instrument-module instrument-module-header break-inside-avoid flex flex-wrap items-center justify-between gap-4 mb-5 pb-4 border-b border-[#F3F4F6]">
           <div className="flex items-center gap-3.5">
             {/* Blue Circle with Sequential Number */}
             <div className="w-9 h-9 rounded-full bg-[#3B82F6] text-white font-bold flex items-center justify-center text-sm shrink-0 shadow-xs">
@@ -90,7 +90,7 @@ export const InstrumentoCardModular: React.FC<InstrumentoCardModularProps> = ({
 
       {/* MÓDULO 2: CONTEÚDO + FONTE DE ESTUDO */}
       {modules.includes('content_src') && (
-        <div className="break-inside-avoid">
+        <div className="instrument-module instrument-module-content-src break-inside-avoid">
           <InfoGrid
             conteudo={instrumento.conteudo}
             fonteEstudo={instrumento.fonteEstudo}
@@ -100,21 +100,21 @@ export const InstrumentoCardModular: React.FC<InstrumentoCardModularProps> = ({
 
       {/* MÓDULO 3: DESENVOLVIMENTO */}
       {modules.includes('development') && (
-        <div className="break-inside-avoid">
+        <div className="instrument-module instrument-module-development break-inside-avoid">
           <DevelopmentSection desenvolvimento={instrumento.desenvolvimento} />
         </div>
       )}
 
       {/* MÓDULO 4: CRITÉRIOS AVALIATIVOS */}
       {modules.includes('criteria') && (
-        <div className="break-inside-avoid">
+        <div className="instrument-module instrument-module-criteria break-inside-avoid">
           <CriteriaSection criterios={instrumento.criterios} />
         </div>
       )}
 
-      {/* MÓDULO 5: HABILIDADES (BNCC) */}
+      {/* MÓDULO 5: HABILIDADES (BNCC) - Apenas se ativo */}
       {modules.includes('skills') && includeSkills && (
-        <div className="break-inside-avoid">
+        <div className="instrument-module instrument-module-skills break-inside-avoid">
           <SkillsSection habilidades={instrumento.habilidades} />
         </div>
       )}

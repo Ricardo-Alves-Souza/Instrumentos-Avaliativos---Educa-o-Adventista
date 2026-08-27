@@ -45,8 +45,9 @@ export const FULL_HEADER_HEIGHT_MM = 56;
 export const CONT_HEADER_HEIGHT_MM = 22;
 export const FOOTER_HEIGHT_MM = 14;
 
-export const DISCIPLINA_HEADER_HEIGHT_MM = 14;
+export const DISCIPLINA_HEADER_HEIGHT_MM = 12;
 export const CARD_CONTAINER_OVERHEAD_MM = 8; // border + card padding
+export const CONTINUATION_HEADER_OVERHEAD_MM = 9; // Continuation header badge bar
 
 /**
  * Calculates estimated height in mm for each indivisible module
@@ -58,34 +59,34 @@ export function estimateModuleHeight(
 ): number {
   switch (moduleKind) {
     case 'header': {
-      // Module 1: Sequential #, Code, Title, Badges (Data, Peso, Disciplina)
-      return 24;
+      // MÓDULO 1: Sequential #, Code, Title, Badges (Data, Peso, Disciplina)
+      return 22;
     }
     case 'content_src': {
-      // Module 2: Conteúdo + Fonte de Estudo grid
+      // MÓDULO 2: Conteúdo + Fonte de Estudo grid (never split)
       const cLen = inst.conteudo?.length || 0;
       const fLen = inst.fonteEstudo?.length || 0;
       const maxLen = Math.max(cLen, fLen);
-      const lines = Math.max(Math.ceil(maxLen / 36), 1);
-      return 12 + lines * 4.2 + 6; // base + text height + margin
+      const lines = Math.max(Math.ceil(maxLen / 40), 1);
+      return 10 + lines * 4 + 4; // base title + text lines + margin
     }
     case 'development': {
-      // Module 3: Desenvolvimento text
+      // MÓDULO 3: Desenvolvimento title + text (never split)
       const dLen = inst.desenvolvimento?.length || 0;
       if (dLen === 0) return 0;
-      const lines = Math.ceil(dLen / 80);
+      const lines = Math.ceil(dLen / 85);
       const paragraphs = inst.desenvolvimento.split(/\n{2,}/).filter(Boolean).length || 1;
-      return 7 + lines * 4.2 + paragraphs * 2 + 6; // title + text lines + paragraph spacing + margin
+      return 6 + lines * 4 + paragraphs * 2 + 4; // title + text lines + paragraph spacing + margin
     }
     case 'criteria': {
-      // Module 4: Critérios Avaliativos
+      // MÓDULO 4: Critérios Avaliativos title + criteria rows (never split)
       if (!inst.criterios || inst.criterios.length === 0) return 0;
-      return 7 + inst.criterios.length * 6.8 + 6; // title + each criterion row + margin
+      return 6 + inst.criterios.length * 6.5 + 4; // title + each criterion row + margin
     }
     case 'skills': {
-      // Module 5: Habilidades (BNCC)
+      // MÓDULO 5: Habilidades (BNCC) title + skills boxes (never split, conditional)
       if (!includeSkills || !inst.habilidades || inst.habilidades.length === 0) return 0;
-      return 7 + inst.habilidades.length * 10 + 6; // title + skill badge boxes + margin
+      return 6 + inst.habilidades.length * 9.5 + 4; // title + skill badge boxes + margin
     }
     default:
       return 0;
@@ -122,17 +123,19 @@ export interface PaginateParams {
 
 /**
  * Intelligent pagination engine:
- * 1. Filter ONLY 'APROVADO' status instruments (strict requirement).
- * 2. Group instruments by disciplina (ignoring disciplinas with 0 approved items).
+ * 1. Filter ONLY 'APROVADO' status instruments.
+ * 2. Group instruments by disciplina.
  * 3. Sort disciplines by academic precedence and instruments within each discipline.
- * 4. Number sequentially per discipline (01, 02, 03...) based purely on approved items.
- * 5. Paginate strictly module-by-module without auto-breaking between disciplines:
- *    discipline transition flows naturally onto the same page if the header + next module fits!
+ * 4. Number sequentially per discipline (01, 02, 03...).
+ * 5. Paginate strictly module-by-module (indivisible modules 1 to 5):
+ *    - First try to fit entire instrument on current page.
+ *    - If not, fit the MAXIMUM number of full modules on current page, then continue remaining modules on next page.
+ *    - Discipline transitions flow seamlessly onto the same page if space permits.
  */
 export function paginateTurmaDocument(params: PaginateParams): PageData[] {
   const { turmaNome, bimestre, anoLetivo, instrumentos, disciplinas, includeSkills } = params;
 
-  // RULE 5 & 6: FILTER ONLY "APROVADO"
+  // Filter ONLY "APROVADO"
   const approvedOnly = instrumentos.filter((inst) => inst.status === 'APROVADO');
 
   // Handle empty state: 1 page with empty message
@@ -162,9 +165,8 @@ export function paginateTurmaDocument(params: PaginateParams): PageData[] {
   }
 
   // 2. Sort groups by academic precedence and sort instruments inside each group
-  // RULE 2, 3, 4: Dynamic sequential numbering (01, 02, 03...) restart per discipline
   const groups = Array.from(map.values())
-    .filter((g) => g.items.length > 0) // RULE 8: Discard disciplines without approved instruments
+    .filter((g) => g.items.length > 0)
     .map((g) => {
       const discObj = disciplinas.find(
         (d) => d.id === g.discId || d.nome.toLowerCase() === g.discNome.toLowerCase()
@@ -221,148 +223,145 @@ export function paginateTurmaDocument(params: PaginateParams): PageData[] {
     let disciplinaHeaderRenderedForGroup = false;
 
     for (const { inst, seqNumber } of group.items) {
-      // Build active modules list for this instrument
+      // Build active modules list for this instrument (Modules 1 to 4, or 1 to 5 if skills active)
       const activeModules: ModuleKind[] = ['header', 'content_src', 'development', 'criteria'];
       if (includeSkills && inst.habilidades && inst.habilidades.length > 0) {
         activeModules.push('skills');
       }
 
-      // Check height of entire instrument
-      const fullInstHeight = estimateFullInstrumentHeight(inst, includeSkills);
-      const discHeaderNeededHeight = !disciplinaHeaderRenderedForGroup ? DISCIPLINA_HEADER_HEIGHT_MM : 0;
-      const totalNeeded = fullInstHeight + discHeaderNeededHeight;
-
-      // RULE 1 & 9: Does the entire instrument (and discipline header if needed) fit in current page?
-      // (Even when switching discipline, we continue on the same page if it fits!)
-      if (totalNeeded <= currentPageRemainingHeight) {
-        if (!disciplinaHeaderRenderedForGroup) {
-          currentPageSections.push({
-            type: 'disciplina',
-            disciplinaNome: group.disciplinaNome,
-            estimatedHeight: DISCIPLINA_HEADER_HEIGHT_MM,
-          });
-          currentPageRemainingHeight -= DISCIPLINA_HEADER_HEIGHT_MM;
-          disciplinaHeaderRenderedForGroup = true;
-        }
-
-        currentPageSections.push({
-          type: 'instrument',
-          piece: {
-            instrumento: inst,
-            modules: activeModules,
-            isContinuation: false,
-            isCompleted: true,
-            estimatedHeight: fullInstHeight,
-            sequentialNumber: seqNumber,
-          },
-        });
-        currentPageRemainingHeight -= fullInstHeight;
-        continue;
-      }
-
-      // RULE: If it does not fit entirely on current page, check if starting a fresh page allows the WHOLE instrument to fit.
-      // But only break if the first module (header) cannot fit in current page space!
-      const firstModHeight = estimateModuleHeight(activeModules[0], inst, includeSkills) + CARD_CONTAINER_OVERHEAD_MM;
-      const minFirstModuleNeeded = firstModHeight + (!disciplinaHeaderRenderedForGroup ? DISCIPLINA_HEADER_HEIGHT_MM : 0);
-
-      // If even the first module doesn't fit on the current page, or if the current page has little room and moving to fresh page fits whole instrument:
-      const freshPageHeight = getUsableHeightForPage(pages.length + (currentPageSections.length > 0 ? 1 : 0));
-      const neededOnFreshPage = fullInstHeight + (!disciplinaHeaderRenderedForGroup ? DISCIPLINA_HEADER_HEIGHT_MM : 0);
-
-      if (currentPageSections.length > 0 && (minFirstModuleNeeded > currentPageRemainingHeight || (neededOnFreshPage <= freshPageHeight && currentPageRemainingHeight < 80))) {
-        finalizePage();
-
-        if (!disciplinaHeaderRenderedForGroup) {
-          currentPageSections.push({
-            type: 'disciplina',
-            disciplinaNome: group.disciplinaNome,
-            estimatedHeight: DISCIPLINA_HEADER_HEIGHT_MM,
-          });
-          currentPageRemainingHeight -= DISCIPLINA_HEADER_HEIGHT_MM;
-          disciplinaHeaderRenderedForGroup = true;
-        }
-
-        if (fullInstHeight <= currentPageRemainingHeight) {
-          currentPageSections.push({
-            type: 'instrument',
-            piece: {
-              instrumento: inst,
-              modules: activeModules,
-              isContinuation: false,
-              isCompleted: true,
-              estimatedHeight: fullInstHeight,
-              sequentialNumber: seqNumber,
-            },
-          });
-          currentPageRemainingHeight -= fullInstHeight;
-          continue;
-        }
-      }
-
-      // RULE: Split strictly between indivisible modules
       let remainingModules = [...activeModules];
       let isFirstPieceOfInst = true;
 
       while (remainingModules.length > 0) {
-        if (!disciplinaHeaderRenderedForGroup) {
-          // If not even the discipline header + first module can fit, break to new page
-          const firstRemainingH = estimateModuleHeight(remainingModules[0], inst, includeSkills);
-          if (currentPageRemainingHeight < DISCIPLINA_HEADER_HEIGHT_MM + firstRemainingH && currentPageSections.length > 0) {
-            finalizePage();
+        const discHeaderCost = !disciplinaHeaderRenderedForGroup ? DISCIPLINA_HEADER_HEIGHT_MM : 0;
+        const overheadCost = isFirstPieceOfInst ? CARD_CONTAINER_OVERHEAD_MM : (CARD_CONTAINER_OVERHEAD_MM + CONTINUATION_HEADER_OVERHEAD_MM);
+
+        // Check if ALL remaining modules fit in the current page
+        let sumAllRemaining = 0;
+        for (const mod of remainingModules) {
+          sumAllRemaining += estimateModuleHeight(mod, inst, includeSkills);
+        }
+        const totalNeededForAll = discHeaderCost + overheadCost + sumAllRemaining;
+
+        if (totalNeededForAll <= currentPageRemainingHeight) {
+          // All remaining modules fit on the current page!
+          if (!disciplinaHeaderRenderedForGroup) {
+            currentPageSections.push({
+              type: 'disciplina',
+              disciplinaNome: group.disciplinaNome,
+              estimatedHeight: DISCIPLINA_HEADER_HEIGHT_MM,
+            });
+            currentPageRemainingHeight -= DISCIPLINA_HEADER_HEIGHT_MM;
+            disciplinaHeaderRenderedForGroup = true;
           }
 
+          const isCompleted = true;
           currentPageSections.push({
-            type: 'disciplina',
-            disciplinaNome: group.disciplinaNome,
-            estimatedHeight: DISCIPLINA_HEADER_HEIGHT_MM,
+            type: 'instrument',
+            piece: {
+              instrumento: inst,
+              modules: remainingModules,
+              isContinuation: !isFirstPieceOfInst,
+              isCompleted,
+              estimatedHeight: overheadCost + sumAllRemaining,
+              sequentialNumber: seqNumber,
+            },
           });
-          currentPageRemainingHeight -= DISCIPLINA_HEADER_HEIGHT_MM;
-          disciplinaHeaderRenderedForGroup = true;
+          currentPageRemainingHeight -= (overheadCost + sumAllRemaining);
+          remainingModules = [];
+          break;
         }
 
-        // Find how many consecutive modules fit on current page
-        const modulesForCurrentPage: ModuleKind[] = [];
-        let allocatedHeight = CARD_CONTAINER_OVERHEAD_MM;
+        // If NOT all remaining modules fit, find the MAXIMUM number of complete modules that DO fit
+        let fittedModulesCount = 0;
+        let cumulativeHeight = 0;
 
         for (let i = 0; i < remainingModules.length; i++) {
-          const modKind = remainingModules[i];
-          const modH = estimateModuleHeight(modKind, inst, includeSkills);
-
-          if (
-            allocatedHeight + modH <= currentPageRemainingHeight ||
-            (modulesForCurrentPage.length === 0 && currentPageSections.length === 0)
-          ) {
-            modulesForCurrentPage.push(modKind);
-            allocatedHeight += modH;
+          const modHeight = estimateModuleHeight(remainingModules[i], inst, includeSkills);
+          if (discHeaderCost + overheadCost + cumulativeHeight + modHeight <= currentPageRemainingHeight) {
+            cumulativeHeight += modHeight;
+            fittedModulesCount++;
           } else {
             break;
           }
         }
 
-        if (modulesForCurrentPage.length === 0) {
-          finalizePage();
-          continue;
-        }
+        if (fittedModulesCount > 0) {
+          // Place the maximum fitting modules on current page
+          if (!disciplinaHeaderRenderedForGroup) {
+            currentPageSections.push({
+              type: 'disciplina',
+              disciplinaNome: group.disciplinaNome,
+              estimatedHeight: DISCIPLINA_HEADER_HEIGHT_MM,
+            });
+            currentPageRemainingHeight -= DISCIPLINA_HEADER_HEIGHT_MM;
+            disciplinaHeaderRenderedForGroup = true;
+          }
 
-        const isCompleted = modulesForCurrentPage.length === remainingModules.length;
-        currentPageSections.push({
-          type: 'instrument',
-          piece: {
-            instrumento: inst,
-            modules: modulesForCurrentPage,
-            isContinuation: !isFirstPieceOfInst,
-            isCompleted,
-            estimatedHeight: allocatedHeight,
-            sequentialNumber: seqNumber,
-          },
-        });
-        currentPageRemainingHeight -= allocatedHeight;
+          const modulesToPlace = remainingModules.slice(0, fittedModulesCount);
+          const isCompleted = fittedModulesCount === remainingModules.length;
+          const pieceHeight = overheadCost + cumulativeHeight;
 
-        remainingModules = remainingModules.slice(modulesForCurrentPage.length);
-        isFirstPieceOfInst = false;
+          currentPageSections.push({
+            type: 'instrument',
+            piece: {
+              instrumento: inst,
+              modules: modulesToPlace,
+              isContinuation: !isFirstPieceOfInst,
+              isCompleted,
+              estimatedHeight: pieceHeight,
+              sequentialNumber: seqNumber,
+            },
+          });
+          currentPageRemainingHeight -= pieceHeight;
 
-        if (remainingModules.length > 0) {
-          finalizePage();
+          remainingModules = remainingModules.slice(fittedModulesCount);
+          isFirstPieceOfInst = false;
+
+          // If there are still remaining modules, break page
+          if (remainingModules.length > 0) {
+            finalizePage();
+          }
+        } else {
+          // Not even the first module fits on the current page
+          if (currentPageSections.length > 0) {
+            // Page has previous content: finalize page to get a fresh page
+            finalizePage();
+          } else {
+            // Edge case: Even on a completely empty fresh page, the single module exceeds page size.
+            // Render it as a single indivisible module on this fresh page rather than getting stuck.
+            if (!disciplinaHeaderRenderedForGroup) {
+              currentPageSections.push({
+                type: 'disciplina',
+                disciplinaNome: group.disciplinaNome,
+                estimatedHeight: DISCIPLINA_HEADER_HEIGHT_MM,
+              });
+              disciplinaHeaderRenderedForGroup = true;
+            }
+
+            const modulesToPlace = [remainingModules[0]];
+            const modHeight = estimateModuleHeight(remainingModules[0], inst, includeSkills);
+            const pieceHeight = overheadCost + modHeight;
+
+            currentPageSections.push({
+              type: 'instrument',
+              piece: {
+                instrumento: inst,
+                modules: modulesToPlace,
+                isContinuation: !isFirstPieceOfInst,
+                isCompleted: remainingModules.length === 1,
+                estimatedHeight: pieceHeight,
+                sequentialNumber: seqNumber,
+              },
+            });
+
+            remainingModules = remainingModules.slice(1);
+            isFirstPieceOfInst = false;
+
+            if (remainingModules.length > 0) {
+              finalizePage();
+            }
+          }
         }
       }
     }
