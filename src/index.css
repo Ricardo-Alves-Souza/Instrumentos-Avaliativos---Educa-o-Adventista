@@ -38,20 +38,11 @@
     print-color-adjust: exact !important;
   }
 
-  /* Reset all higher-level containers and screen height constraints so pages are never clipped */
+  /* Reset all higher-level application wrappers so pages are never clipped */
   #root,
   #root > div,
-  body > div,
-  .h-screen,
-  .max-h-screen,
-  .min-h-screen,
-  .overflow-hidden,
-  .overflow-y-auto,
-  .overflow-x-hidden,
-  .h-full,
-  main,
-  aside,
-  section {
+  .app-layout,
+  .print-wrapper {
     background: #ffffff !important;
     background-color: #ffffff !important;
     padding: 0 !important;
@@ -66,6 +57,24 @@
     box-shadow: none !important;
     border: none !important;
     transform: none !important;
+  }
+
+  /* Explicit sizing locks for institutional logo in print */
+  .adventist-logo-container {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    background: transparent !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .adventist-logo-container img,
+  .adventist-logo-img {
+    display: block !important;
+    object-fit: contain !important;
+    flex-shrink: 0 !important;
   }
 
   .no-print {
