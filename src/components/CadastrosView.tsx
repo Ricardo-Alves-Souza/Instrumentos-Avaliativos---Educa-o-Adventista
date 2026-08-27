@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   GraduationCap,
   BookOpen,
@@ -14,10 +14,46 @@ import {
   Filter,
   AlertCircle,
   FileCheck,
+  Sun,
+  Sunset,
+  Clock,
+  Sparkles,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Disciplina, Turma, TipoInstrumentoItem } from '../types';
 import { ConfirmModal } from './ConfirmModal';
+
+type TurmaSegmentTab = 'FUNDAMENTAL_1' | 'FUNDAMENTAL_2' | 'ENSINO_MEDIO';
+
+const TURMA_SEGMENTS_CONFIG: {
+  id: TurmaSegmentTab;
+  label: string;
+  shortLabel: string;
+  subtitle: string;
+  nivelMatch: string;
+}[] = [
+  {
+    id: 'FUNDAMENTAL_1',
+    label: 'Fundamental I',
+    shortLabel: 'Fund. I',
+    subtitle: '1º ao 5º Ano',
+    nivelMatch: 'Ensino Fundamental I',
+  },
+  {
+    id: 'FUNDAMENTAL_2',
+    label: 'Fundamental II',
+    shortLabel: 'Fund. II',
+    subtitle: '6º ao 9º Ano',
+    nivelMatch: 'Ensino Fundamental II',
+  },
+  {
+    id: 'ENSINO_MEDIO',
+    label: 'Ensino Médio',
+    shortLabel: 'Ens. Médio',
+    subtitle: '1ª à 3ª Série',
+    nivelMatch: 'Ensino Médio',
+  },
+];
 
 export const CadastrosView: React.FC = () => {
   const {
@@ -43,8 +79,7 @@ export const CadastrosView: React.FC = () => {
   const [searchDisc, setSearchDisc] = useState('');
   const [searchTurma, setSearchTurma] = useState('');
   const [searchTipoInst, setSearchTipoInst] = useState('');
-  const [filterNivel, setFilterNivel] = useState<string>('all');
-  const [filterTurno, setFilterTurno] = useState<string>('all');
+  const [turmaActiveSegment, setTurmaActiveSegment] = useState<TurmaSegmentTab>('FUNDAMENTAL_1');
 
   // Disciplina Modal State
   const [isDiscModalOpen, setIsDiscModalOpen] = useState(false);
@@ -129,7 +164,7 @@ export const CadastrosView: React.FC = () => {
   };
 
   // Open Turma Modal for Create or Edit
-  const handleOpenTurmaModal = (t?: Turma) => {
+  const handleOpenTurmaModal = (t?: Turma, defaultTurno?: 'Manhã' | 'Tarde') => {
     setTurmaError(null);
     if (t) {
       setEditingTurma(t);
@@ -140,9 +175,19 @@ export const CadastrosView: React.FC = () => {
     } else {
       setEditingTurma(null);
       setTurmaNome('');
-      setTurmaSerie('1º Ano');
-      setTurmaNivel('Ensino Fundamental I');
-      setTurmaTurno('Manhã');
+
+      const currentSegment = TURMA_SEGMENTS_CONFIG.find((s) => s.id === turmaActiveSegment);
+      const defaultNivel = currentSegment ? currentSegment.nivelMatch : 'Ensino Fundamental I';
+      let defaultSerie = '1º Ano';
+      if (turmaActiveSegment === 'FUNDAMENTAL_2') {
+        defaultSerie = '6º Ano';
+      } else if (turmaActiveSegment === 'ENSINO_MEDIO') {
+        defaultSerie = '1ª Série';
+      }
+
+      setTurmaNivel(defaultNivel);
+      setTurmaSerie(defaultSerie);
+      setTurmaTurno(defaultTurno || 'Manhã');
     }
     setIsTurmaModalOpen(true);
   };
@@ -264,14 +309,31 @@ export const CadastrosView: React.FC = () => {
       d.codigo.toLowerCase().includes(searchDisc.toLowerCase())
   );
 
-  const filteredTurmas = turmas.filter((t) => {
-    const matchSearch =
-      t.nome.toLowerCase().includes(searchTurma.toLowerCase()) ||
-      t.serie.toLowerCase().includes(searchTurma.toLowerCase());
-    const matchNivel = filterNivel === 'all' || t.nivel === filterNivel;
-    const matchTurno = filterTurno === 'all' || t.turno === filterTurno;
-    return matchSearch && matchNivel && matchTurno;
-  });
+  const activeSegmentObj = useMemo(() => {
+    return TURMA_SEGMENTS_CONFIG.find((s) => s.id === turmaActiveSegment) || TURMA_SEGMENTS_CONFIG[0];
+  }, [turmaActiveSegment]);
+
+  const turmasInActiveSegment = useMemo(() => {
+    return turmas.filter((t) => t.nivel === activeSegmentObj.nivelMatch);
+  }, [turmas, activeSegmentObj]);
+
+  const filteredTurmasInSegment = useMemo(() => {
+    const term = searchTurma.trim().toLowerCase();
+    if (!term) return turmasInActiveSegment;
+    return turmasInActiveSegment.filter(
+      (t) =>
+        t.nome.toLowerCase().includes(term) ||
+        t.serie.toLowerCase().includes(term)
+    );
+  }, [turmasInActiveSegment, searchTurma]);
+
+  const turmasManha = useMemo(() => {
+    return filteredTurmasInSegment.filter((t) => t.turno === 'Manhã');
+  }, [filteredTurmasInSegment]);
+
+  const turmasTarde = useMemo(() => {
+    return filteredTurmasInSegment.filter((t) => t.turno === 'Tarde');
+  }, [filteredTurmasInSegment]);
 
   const filteredTipos = tiposInstrumento.filter((t) =>
     t.nome.toLowerCase().includes(searchTipoInst.toLowerCase())
@@ -440,101 +502,338 @@ export const CadastrosView: React.FC = () => {
 
       {/* TURMAS SUB-TAB */}
       {activeSubTab === 'turmas' && (
-        <div className="space-y-4">
-          <div className="bg-white p-4 rounded-xl border border-[#E5E7EB] shadow-xs flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3 flex-1">
-              <div className="relative min-w-[200px] flex-1">
-                <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Buscar por turma ou série..."
-                  value={searchTurma}
-                  onChange={(e) => setSearchTurma(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-[#111827] focus:outline-none font-medium"
-                />
-              </div>
+        <div className="space-y-6">
+          {/* NÍVEL DE ENSINO: ABAS SUPERIORES */}
+          <div className="bg-white p-2 border border-[#E5E7EB] rounded-2xl shadow-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {TURMA_SEGMENTS_CONFIG.map((seg) => {
+                const isSelected = turmaActiveSegment === seg.id;
+                const segCount = turmas.filter((t) => t.nivel === seg.nivelMatch).length;
+                const manhaCount = turmas.filter(
+                  (t) => t.nivel === seg.nivelMatch && t.turno === 'Manhã'
+                ).length;
+                const tardeCount = turmas.filter(
+                  (t) => t.nivel === seg.nivelMatch && t.turno === 'Tarde'
+                ).length;
 
-              <select
-                value={filterNivel}
-                onChange={(e) => setFilterNivel(e.target.value)}
-                className="text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 bg-[#F9FAFB] text-[#111827] font-medium"
-              >
-                <option value="all">Todos os Níveis</option>
-                <option value="Ensino Fundamental I">Ensino Fundamental I (1º ao 5º)</option>
-                <option value="Ensino Fundamental II">Ensino Fundamental II (6º ao 9º)</option>
-                <option value="Ensino Médio">Ensino Médio (1º ao 3º)</option>
-              </select>
+                return (
+                  <button
+                    key={seg.id}
+                    type="button"
+                    onClick={() => setTurmaActiveSegment(seg.id)}
+                    className={`flex items-center justify-between p-3.5 rounded-xl border transition-all text-left cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#111827] text-white border-[#111827] shadow-sm'
+                        : 'bg-[#F9FAFB] text-[#374151] border-[#E5E7EB] hover:bg-white hover:border-[#D1D5DB]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                          isSelected
+                            ? 'bg-white/10 text-white'
+                            : 'bg-white text-[#3B82F6] border border-[#E5E7EB]'
+                        }`}
+                      >
+                        <GraduationCap className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3
+                            className={`text-xs font-bold truncate ${
+                              isSelected ? 'text-white' : 'text-[#111827]'
+                            }`}
+                          >
+                            {seg.label}
+                          </h3>
+                        </div>
+                        <p
+                          className={`text-[11px] truncate mt-0.5 ${
+                            isSelected ? 'text-slate-300' : 'text-[#6B7280]'
+                          }`}
+                        >
+                          {seg.subtitle}
+                        </p>
+                      </div>
+                    </div>
 
-              <select
-                value={filterTurno}
-                onChange={(e) => setFilterTurno(e.target.value)}
-                className="text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 bg-[#F9FAFB] text-[#111827] font-medium"
-              >
-                <option value="all">Todos os Turnos</option>
-                <option value="Manhã">Manhã</option>
-                <option value="Tarde">Tarde</option>
-              </select>
+                    <div className="flex flex-col items-end shrink-0 pl-2">
+                      <span
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                          isSelected
+                            ? 'bg-white/20 text-white'
+                            : 'bg-white text-[#111827] border border-[#E5E7EB]'
+                        }`}
+                      >
+                        {segCount} {segCount === 1 ? 'turma' : 'turmas'}
+                      </span>
+                      <span
+                        className={`text-[9px] mt-1 font-medium ${
+                          isSelected ? 'text-slate-300' : 'text-[#9CA3AF]'
+                        }`}
+                      >
+                        {manhaCount}M · {tardeCount}T
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-
-            {isAuthorized && (
-              <button
-                type="button"
-                onClick={() => handleOpenTurmaModal()}
-                className="inline-flex items-center gap-2 bg-[#111827] hover:bg-[#1f2937] text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Nova Turma</span>
-              </button>
-            )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {filteredTurmas.map((t) => (
-              <div
-                key={t.id}
-                className="bg-white border border-[#E5E7EB] rounded-xl p-4 shadow-xs hover:border-[#3B82F6] transition-all flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="text-xs font-bold text-[#111827]">{t.nome}</h3>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      t.turno === 'Manhã'
-                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : 'bg-blue-50 text-blue-700 border-blue-200'
-                    }`}>
-                      {t.turno}
-                    </span>
+          {/* BARRA DE PESQUISA & AÇÕES RÁPIDAS */}
+          <div className="bg-white p-4 rounded-xl border border-[#E5E7EB] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder={`Buscar turma em ${activeSegmentObj.label} (ex: 1º Ano A, 6º Ano)...`}
+                value={searchTurma}
+                onChange={(e) => setSearchTurma(e.target.value)}
+                className="w-full pl-9 pr-9 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
+              />
+              {searchTurma && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTurma('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#111827] p-0.5 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] text-[#6B7280] bg-[#F9FAFB] px-3 py-2 rounded-lg border border-[#E5E7EB] font-medium">
+                <span>{filteredTurmasInSegment.length} turmas encontradas</span>
+              </span>
+
+              {isAuthorized && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenTurmaModal()}
+                  className="inline-flex items-center gap-2 bg-[#111827] hover:bg-[#1f2937] text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nova Turma</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* SEPARAÇÃO VISUAL POR TURNO: MANHÃ E TARDE */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            {/* COLUNA: TURNO DA MANHÃ */}
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[#F3F4F6]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center border border-amber-200">
+                    <Sun className="w-4 h-4" />
                   </div>
-                  <p className="text-[11px] text-[#6B7280]">{t.nivel}</p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-bold text-[#111827]">Turno da Manhã</h3>
+                      <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                        {turmasManha.length} {turmasManha.length === 1 ? 'turma' : 'turmas'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#6B7280]">
+                      Período matutino no {activeSegmentObj.label}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="mt-3 pt-3 border-t border-[#F3F4F6] flex items-center justify-between">
-                  <span className="text-[10px] text-[#9CA3AF] font-mono">
-                    Série: {t.serie}
-                  </span>
+                {isAuthorized && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenTurmaModal(undefined, 'Manhã')}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-md border border-amber-200 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Adicionar</span>
+                  </button>
+                )}
+              </div>
+
+              {turmasManha.length === 0 ? (
+                <div className="p-8 text-center bg-[#F9FAFB] border border-dashed border-[#E5E7EB] rounded-xl space-y-2">
+                  <div className="w-8 h-8 mx-auto rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <Sun className="w-4 h-4" />
+                  </div>
+                  <p className="text-xs font-medium text-[#6B7280]">
+                    {searchTurma.trim()
+                      ? `Nenhuma turma da manhã encontrada com "${searchTurma}".`
+                      : `Nenhuma turma cadastrada no turno da manhã para ${activeSegmentObj.label}.`}
+                  </p>
                   {isAuthorized && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenTurmaModal(t)}
-                        className="p-1 text-[#6B7280] hover:text-[#3B82F6] hover:bg-[#EFF6FF] rounded cursor-pointer transition-colors"
-                        title="Editar Turma"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeletingTurma(t)}
-                        className="p-1 text-[#6B7280] hover:text-red-600 hover:bg-red-50 rounded cursor-pointer transition-colors"
-                        title="Excluir Turma"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenTurmaModal(undefined, 'Manhã')}
+                      className="text-[11px] font-bold text-amber-700 hover:underline cursor-pointer"
+                    >
+                      Cadastrar primeira turma da manhã
+                    </button>
                   )}
                 </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {turmasManha.map((t) => (
+                    <div
+                      key={t.id}
+                      className="bg-white border border-[#E5E7EB] hover:border-amber-400 rounded-xl p-3.5 shadow-xs transition-all flex flex-col justify-between group"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <h4 className="text-xs font-bold text-[#111827] group-hover:text-amber-700 transition-colors">
+                            {t.nome}
+                          </h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 shrink-0 flex items-center gap-1">
+                            <Sun className="w-3 h-3" />
+                            Manhã
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#6B7280] font-medium flex items-center gap-1.5">
+                          <span>Série:</span>
+                          <span className="text-[#111827] font-semibold">{t.serie}</span>
+                        </p>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-[#F3F4F6] flex items-center justify-between">
+                        <span className="text-[10px] text-[#9CA3AF] font-mono">
+                          Ano: {t.anoLetivo || new Date().getFullYear()}
+                        </span>
+                        {isAuthorized && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenTurmaModal(t)}
+                              className="p-1 text-[#6B7280] hover:text-[#3B82F6] hover:bg-[#EFF6FF] rounded cursor-pointer transition-colors"
+                              title="Editar Turma"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTurma(t)}
+                              className="p-1 text-[#6B7280] hover:text-red-600 hover:bg-red-50 rounded cursor-pointer transition-colors"
+                              title="Excluir Turma"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* COLUNA: TURNO DA TARDE */}
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[#F3F4F6]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-200">
+                    <Sunset className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-bold text-[#111827]">Turno da Tarde</h3>
+                      <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
+                        {turmasTarde.length} {turmasTarde.length === 1 ? 'turma' : 'turmas'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#6B7280]">
+                      Período vespertino no {activeSegmentObj.label}
+                    </p>
+                  </div>
+                </div>
+
+                {isAuthorized && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenTurmaModal(undefined, 'Tarde')}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-800 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md border border-blue-200 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Adicionar</span>
+                  </button>
+                )}
               </div>
-            ))}
+
+              {turmasTarde.length === 0 ? (
+                <div className="p-8 text-center bg-[#F9FAFB] border border-dashed border-[#E5E7EB] rounded-xl space-y-2">
+                  <div className="w-8 h-8 mx-auto rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <Sunset className="w-4 h-4" />
+                  </div>
+                  <p className="text-xs font-medium text-[#6B7280]">
+                    {searchTurma.trim()
+                      ? `Nenhuma turma da tarde encontrada com "${searchTurma}".`
+                      : `Nenhuma turma cadastrada no turno da tarde para ${activeSegmentObj.label}.`}
+                  </p>
+                  {isAuthorized && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenTurmaModal(undefined, 'Tarde')}
+                      className="text-[11px] font-bold text-blue-700 hover:underline cursor-pointer"
+                    >
+                      Cadastrar primeira turma da tarde
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {turmasTarde.map((t) => (
+                    <div
+                      key={t.id}
+                      className="bg-white border border-[#E5E7EB] hover:border-blue-400 rounded-xl p-3.5 shadow-xs transition-all flex flex-col justify-between group"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <h4 className="text-xs font-bold text-[#111827] group-hover:text-blue-700 transition-colors">
+                            {t.nome}
+                          </h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 shrink-0 flex items-center gap-1">
+                            <Sunset className="w-3 h-3" />
+                            Tarde
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#6B7280] font-medium flex items-center gap-1.5">
+                          <span>Série:</span>
+                          <span className="text-[#111827] font-semibold">{t.serie}</span>
+                        </p>
+                      </div>
+
+                      <div className="mt-3 pt-2.5 border-t border-[#F3F4F6] flex items-center justify-between">
+                        <span className="text-[10px] text-[#9CA3AF] font-mono">
+                          Ano: {t.anoLetivo || new Date().getFullYear()}
+                        </span>
+                        {isAuthorized && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenTurmaModal(t)}
+                              className="p-1 text-[#6B7280] hover:text-[#3B82F6] hover:bg-[#EFF6FF] rounded cursor-pointer transition-colors"
+                              title="Editar Turma"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTurma(t)}
+                              className="p-1 text-[#6B7280] hover:text-red-600 hover:bg-red-50 rounded cursor-pointer transition-colors"
+                              title="Excluir Turma"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Link2,
   Users,
@@ -13,9 +13,40 @@ import {
   Search,
   X,
   AlertCircle,
+  Layers,
+  Check,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Atribuicao } from '../types';
+import { Atribuicao, Turma } from '../types';
+import { SearchableCombobox, ComboboxOption } from './SearchableCombobox';
+
+type TurmaSegment = 'FUNDAMENTAL_1' | 'FUNDAMENTAL_2' | 'ENSINO_MEDIO';
+
+const SEGMENTS_CONFIG: {
+  id: TurmaSegment;
+  label: string;
+  shortLabel: string;
+  nivelMatch: string;
+}[] = [
+  {
+    id: 'FUNDAMENTAL_1',
+    label: 'Fundamental I',
+    shortLabel: 'Fund. I',
+    nivelMatch: 'Ensino Fundamental I',
+  },
+  {
+    id: 'FUNDAMENTAL_2',
+    label: 'Fundamental II',
+    shortLabel: 'Fund. II',
+    nivelMatch: 'Ensino Fundamental II',
+  },
+  {
+    id: 'ENSINO_MEDIO',
+    label: 'Ensino Médio',
+    shortLabel: 'Ens. Médio',
+    nivelMatch: 'Ensino Médio',
+  },
+];
 
 export const AtribuicoesView: React.FC = () => {
   const {
@@ -36,15 +67,37 @@ export const AtribuicoesView: React.FC = () => {
   const [selectedProfessorId, setSelectedProfessorId] = useState<string>('');
   const [selectedDisciplinaIds, setSelectedDisciplinaIds] = useState<string[]>([]);
   const [selectedTurmaIds, setSelectedTurmaIds] = useState<string[]>([]);
-  const [searchProf, setSearchProf] = useState('');
-  const [searchTurmaModal, setSearchTurmaModal] = useState('');
+  
+  // Filters & Search
+  const [searchProfList, setSearchProfList] = useState('');
+  const [searchDisciplinaModal, setSearchDisciplinaModal] = useState('');
+  const [activeTurmaSegment, setActiveTurmaSegment] = useState<TurmaSegment>('FUNDAMENTAL_1');
 
   // Apenas usuários reais com perfil PROFESSOR e ativos no sistema
-  const professoresValidos = users.filter((u) => u.role === 'PROFESSOR');
+  const professoresValidos = useMemo(
+    () => users.filter((u) => u.role === 'PROFESSOR'),
+    [users]
+  );
+
+  // Opções para o Combobox de Professores
+  const professorOptions: ComboboxOption[] = useMemo(
+    () =>
+      professoresValidos.map((p) => ({
+        id: p.id,
+        label: p.nome,
+        subLabel: p.email,
+        badge: 'Docente',
+      })),
+    [professoresValidos]
+  );
 
   // Filtrar atribuições para garantir que pertençam a professores reais existentes no sistema
-  const validAtribuicoes = atribuicoes.filter((a) =>
-    users.some((u) => u.id === a.professorId && u.role === 'PROFESSOR')
+  const validAtribuicoes = useMemo(
+    () =>
+      atribuicoes.filter((a) =>
+        users.some((u) => u.id === a.professorId && u.role === 'PROFESSOR')
+      ),
+    [atribuicoes, users]
   );
 
   // Open modal for editing or new assignment
@@ -58,10 +111,12 @@ export const AtribuicoesView: React.FC = () => {
       setSelectedDisciplinaIds([]);
       setSelectedTurmaIds([]);
     }
-    setSearchTurmaModal('');
+    setSearchDisciplinaModal('');
+    setActiveTurmaSegment('FUNDAMENTAL_1');
     setIsModalOpen(true);
   };
 
+  // --- DISCIPLINAS HANDLERS ---
   const handleToggleDisciplina = (id: string) => {
     if (selectedDisciplinaIds.includes(id)) {
       setSelectedDisciplinaIds(selectedDisciplinaIds.filter((d) => d !== id));
@@ -70,13 +125,57 @@ export const AtribuicoesView: React.FC = () => {
     }
   };
 
-  const handleSelectAllDisciplinas = () => {
-    setSelectedDisciplinaIds(disciplinas.map((d) => d.id));
+  const filteredDisciplinasModal = useMemo(() => {
+    const term = searchDisciplinaModal.trim().toLowerCase();
+    if (!term) return disciplinas;
+    return disciplinas.filter(
+      (d) =>
+        d.nome.toLowerCase().includes(term) ||
+        d.codigo.toLowerCase().includes(term)
+    );
+  }, [disciplinas, searchDisciplinaModal]);
+
+  const handleSelectVisibleDisciplinas = () => {
+    const visibleIds = filteredDisciplinasModal.map((d) => d.id);
+    const combined = Array.from(new Set([...selectedDisciplinaIds, ...visibleIds]));
+    setSelectedDisciplinaIds(combined);
   };
 
   const handleClearDisciplinas = () => {
-    setSelectedDisciplinaIds([]);
+    if (searchDisciplinaModal.trim()) {
+      const visibleIds = new Set(filteredDisciplinasModal.map((d) => d.id));
+      setSelectedDisciplinaIds(selectedDisciplinaIds.filter((id) => !visibleIds.has(id)));
+    } else {
+      setSelectedDisciplinaIds([]);
+    }
   };
+
+  // --- TURMAS SEGMENTATION & GROUPING ---
+  const segmentTurmasMap = useMemo(() => {
+    const f1 = turmas.filter((t) => t.nivel === 'Ensino Fundamental I');
+    const f2 = turmas.filter((t) => t.nivel === 'Ensino Fundamental II');
+    const em = turmas.filter((t) => t.nivel === 'Ensino Médio');
+    return {
+      FUNDAMENTAL_1: f1,
+      FUNDAMENTAL_2: f2,
+      ENSINO_MEDIO: em,
+    };
+  }, [turmas]);
+
+  const currentSegmentTurmas = segmentTurmasMap[activeTurmaSegment] || [];
+
+  // Group current segment turmas by series/ano
+  const groupedCurrentSegment = useMemo<Record<string, Turma[]>>(() => {
+    const groups: Record<string, Turma[]> = {};
+    currentSegmentTurmas.forEach((t) => {
+      const key = t.serie || 'Outras Turmas';
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(t);
+    });
+    return groups;
+  }, [currentSegmentTurmas]);
 
   const handleToggleTurma = (id: string) => {
     if (selectedTurmaIds.includes(id)) {
@@ -86,12 +185,30 @@ export const AtribuicoesView: React.FC = () => {
     }
   };
 
-  const handleSelectAllTurmas = () => {
-    setSelectedTurmaIds(turmas.map((t) => t.id));
+  // Select all in current segment
+  const handleSelectAllInSegment = () => {
+    const segIds = currentSegmentTurmas.map((t) => t.id);
+    const combined = Array.from(new Set([...selectedTurmaIds, ...segIds]));
+    setSelectedTurmaIds(combined);
   };
 
-  const handleClearTurmas = () => {
-    setSelectedTurmaIds([]);
+  // Deselect all in current segment
+  const handleDeselectAllInSegment = () => {
+    const segIdsSet = new Set(currentSegmentTurmas.map((t) => t.id));
+    setSelectedTurmaIds(selectedTurmaIds.filter((id) => !segIdsSet.has(id)));
+  };
+
+  // Toggle an entire series/year group within the active segment
+  const handleToggleSeriesGroup = (serieTurmas: Turma[]) => {
+    const seriesIds = serieTurmas.map((t) => t.id);
+    const allSelected = seriesIds.every((id) => selectedTurmaIds.includes(id));
+    if (allSelected) {
+      const seriesSet = new Set(seriesIds);
+      setSelectedTurmaIds(selectedTurmaIds.filter((id) => !seriesSet.has(id)));
+    } else {
+      const combined = Array.from(new Set([...selectedTurmaIds, ...seriesIds]));
+      setSelectedTurmaIds(combined);
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -111,7 +228,7 @@ export const AtribuicoesView: React.FC = () => {
   const filteredAtribuicoes = validAtribuicoes.filter((a) => {
     const prof = users.find((u) => u.id === a.professorId);
     const profName = prof ? prof.nome : a.professorNome;
-    return profName.toLowerCase().includes(searchProf.toLowerCase());
+    return profName.toLowerCase().includes(searchProfList.toLowerCase());
   });
 
   return (
@@ -124,7 +241,7 @@ export const AtribuicoesView: React.FC = () => {
             Atribuições de Aulas
           </h1>
           <p className="text-xs text-[#6B7280] mt-0.5">
-            Relacione professores às suas respectivas disciplinas e turmas com seleção múltipla.
+            Relacione professores às suas respectivas disciplinas e turmas com filtros e seleção por segmentos.
           </p>
         </div>
 
@@ -146,9 +263,9 @@ export const AtribuicoesView: React.FC = () => {
           <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Buscar por nome do professor..."
-            value={searchProf}
-            onChange={(e) => setSearchProf(e.target.value)}
+            placeholder="Buscar atribuição por nome do professor..."
+            value={searchProfList}
+            onChange={(e) => setSearchProfList(e.target.value)}
             className="w-full pl-9 pr-4 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
           />
         </div>
@@ -248,49 +365,52 @@ export const AtribuicoesView: React.FC = () => {
         })}
       </div>
 
-      {/* MODAL: NOVA / EDITAR ATRIBUIÇÃO */}
+      {/* MODAL: CONFIGURAR / EDITAR ATRIBUIÇÃO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#111827]/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-3xl rounded-xl shadow-xl border border-[#E5E7EB] overflow-hidden my-8">
-            <div className="px-6 py-4 border-b border-[#F3F4F6] flex items-center justify-between">
-              <h3 className="text-sm font-bold text-[#111827]">
-                Configurar Atribuição de Aulas
-              </h3>
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl border border-[#E5E7EB] overflow-hidden my-6 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-[#F3F4F6] bg-[#F9FAFB] flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-sm font-bold text-[#111827]">
+                  Configurar Atribuição de Aulas
+                </h3>
+                <p className="text-[11px] text-[#6B7280]">
+                  Vincule o docente às disciplinas e turmas com organização estruturada.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="text-[#9CA3AF] hover:text-[#111827] p-1 rounded-md cursor-pointer"
+                className="text-[#9CA3AF] hover:text-[#111827] p-1.5 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
-              {/* Professor select */}
+            <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto flex-1 text-xs">
+              {/* ITEM 1: SELEÇÃO DO PROFESSOR COM AUTOCOMPLETE SEARCHABLE COMBOBOX */}
               <div>
-                <label className="block text-xs font-semibold text-[#374151] mb-1">
-                  Selecione o Professor
-                </label>
-                <select
+                <SearchableCombobox
+                  label="Selecione o Professor"
                   required
+                  placeholder="Digite o nome ou e-mail do docente..."
+                  options={professorOptions}
                   value={selectedProfessorId}
-                  onChange={(e) => setSelectedProfessorId(e.target.value)}
-                  className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] font-medium focus:ring-2 focus:ring-[#3B82F6]/20"
-                >
-                  {professoresValidos.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nome} ({p.email})
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => setSelectedProfessorId(id)}
+                />
               </div>
 
-              {/* Disciplinas Multi-select */}
-              <div className="border border-[#E5E7EB] rounded-xl p-4 bg-[#F9FAFB]/50">
-                <div className="flex items-center justify-between mb-3">
+              {/* ITEM 3: GERENCIAMENTO DAS DISCIPLINAS COM BUSCA RÁPIDA NO TOPO */}
+              <div className="border border-[#E5E7EB] rounded-xl p-4 bg-[#F9FAFB]/50 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <h4 className="text-xs font-bold text-[#111827]">
-                      Disciplinas ({selectedDisciplinaIds.length} selecionadas)
+                    <h4 className="text-xs font-bold text-[#111827] flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4 text-[#3B82F6]" />
+                      Disciplinas
+                      <span className="font-semibold text-[#3B82F6] bg-[#EFF6FF] px-2 py-0.5 rounded-full border border-[#DBEAFE] text-[10px]">
+                        {selectedDisciplinaIds.length} selecionadas de {disciplinas.length}
+                      </span>
                     </h4>
                     <p className="text-[11px] text-[#6B7280]">
                       Marque as disciplinas que este professor leciona.
@@ -299,99 +419,250 @@ export const AtribuicoesView: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={handleSelectAllDisciplinas}
-                      className="text-[11px] font-semibold text-[#3B82F6] hover:underline cursor-pointer"
+                      onClick={handleSelectVisibleDisciplinas}
+                      className="text-[11px] font-semibold text-[#3B82F6] hover:underline cursor-pointer bg-white px-2.5 py-1 rounded-md border border-[#E5E7EB]"
                     >
-                      Selecionar Todas
+                      {searchDisciplinaModal.trim()
+                        ? `Selecionar Filtradas (${filteredDisciplinasModal.length})`
+                        : `Selecionar Todas (${disciplinas.length})`}
                     </button>
-                    <span className="text-[#D1D5DB]">·</span>
                     <button
                       type="button"
                       onClick={handleClearDisciplinas}
-                      className="text-[11px] font-semibold text-[#6B7280] hover:underline cursor-pointer"
+                      className="text-[11px] font-semibold text-[#6B7280] hover:underline cursor-pointer bg-white px-2.5 py-1 rounded-md border border-[#E5E7EB]"
                     >
                       Limpar
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1 bg-white border border-[#E5E7EB] rounded-lg">
-                  {disciplinas.map((d) => {
-                    const isChecked = selectedDisciplinaIds.includes(d.id);
-                    return (
-                      <div
-                        key={d.id}
-                        onClick={() => handleToggleDisciplina(d.id)}
-                        className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
-                          isChecked ? 'bg-[#EFF6FF] text-[#1E40AF]' : 'hover:bg-[#F9FAFB] text-[#374151]'
-                        }`}
-                      >
-                        {isChecked ? (
-                          <CheckSquare className="w-4 h-4 text-[#3B82F6] shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-[#9CA3AF] shrink-0" />
-                        )}
-                        <span className="text-xs font-medium truncate">{d.nome}</span>
-                      </div>
-                    );
-                  })}
+                {/* Quick Search Filter for Disciplines */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Filtrar disciplinas (ex: Física, Matemática, Biologia)..."
+                    value={searchDisciplinaModal}
+                    onChange={(e) => setSearchDisciplinaModal(e.target.value)}
+                    className="w-full pl-8 pr-8 py-1.5 text-xs border border-[#E5E7EB] rounded-lg bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
+                  />
+                  {searchDisciplinaModal && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchDisciplinaModal('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#111827]"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Disciplines Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-44 overflow-y-auto p-1.5 bg-white border border-[#E5E7EB] rounded-lg">
+                  {filteredDisciplinasModal.length === 0 ? (
+                    <div className="col-span-full py-4 text-center text-[#9CA3AF] text-xs">
+                      Nenhuma disciplina encontrada com "{searchDisciplinaModal}".
+                    </div>
+                  ) : (
+                    filteredDisciplinasModal.map((d) => {
+                      const isChecked = selectedDisciplinaIds.includes(d.id);
+                      return (
+                        <div
+                          key={d.id}
+                          onClick={() => handleToggleDisciplina(d.id)}
+                          className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-all border ${
+                            isChecked
+                              ? 'bg-[#EFF6FF] border-[#BFDBFE] text-[#1E40AF]'
+                              : 'bg-white border-[#F3F4F6] hover:bg-[#F9FAFB] text-[#374151]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {isChecked ? (
+                              <CheckSquare className="w-4 h-4 text-[#3B82F6] shrink-0" />
+                            ) : (
+                              <Square className="w-4 h-4 text-[#9CA3AF] shrink-0" />
+                            )}
+                            <span className="text-xs font-medium truncate">{d.nome}</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-[#9CA3AF] shrink-0 ml-1">
+                            {d.codigo}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
-              {/* Turmas Multi-select */}
-              <div className="border border-[#E5E7EB] rounded-xl p-4 bg-[#F9FAFB]/50">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              {/* ITEM 2: ORGANIZAÇÃO DAS TURMAS POR SEGMENTO (ABAS + AGRUPAMENTO POR ANO + AÇÕES GLOBAIS POR SEGMENTO) */}
+              <div className="border border-[#E5E7EB] rounded-xl p-4 bg-[#F9FAFB]/50 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <h4 className="text-xs font-bold text-[#111827]">
-                      Turmas ({selectedTurmaIds.length} selecionadas de {turmas.length})
+                    <h4 className="text-xs font-bold text-[#111827] flex items-center gap-1.5">
+                      <GraduationCap className="w-4 h-4 text-[#3B82F6]" />
+                      Turmas por Segmento
+                      <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 text-[10px]">
+                        Total: {selectedTurmaIds.length} de {turmas.length} turmas
+                      </span>
                     </h4>
                     <p className="text-[11px] text-[#6B7280]">
-                      Marque as turmas em que o professor atuará.
+                      Navegue pelas abas dos segmentos e marque as turmas correspondentes.
                     </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleSelectAllTurmas}
-                      className="text-[11px] font-semibold text-[#3B82F6] hover:underline cursor-pointer"
-                    >
-                      Selecionar Todas ({turmas.length})
-                    </button>
-                    <span className="text-[#D1D5DB]">·</span>
-                    <button
-                      type="button"
-                      onClick={handleClearTurmas}
-                      className="text-[11px] font-semibold text-[#6B7280] hover:underline cursor-pointer"
-                    >
-                      Limpar
-                    </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto p-1 bg-white border border-[#E5E7EB] rounded-lg">
-                  {turmas.map((t) => {
-                    const isChecked = selectedTurmaIds.includes(t.id);
+                {/* 3 Top Tabs for Segments */}
+                <div className="flex items-center gap-1 p-1 bg-[#E5E7EB]/60 rounded-lg">
+                  {SEGMENTS_CONFIG.map((seg) => {
+                    const segTurmas = segmentTurmasMap[seg.id] || [];
+                    const segSelectedCount = segTurmas.filter((t) =>
+                      selectedTurmaIds.includes(t.id)
+                    ).length;
+                    const isActive = activeTurmaSegment === seg.id;
+
                     return (
-                      <div
-                        key={t.id}
-                        onClick={() => handleToggleTurma(t.id)}
-                        className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
-                          isChecked ? 'bg-[#EFF6FF] text-[#1E40AF]' : 'hover:bg-[#F9FAFB] text-[#374151]'
+                      <button
+                        key={seg.id}
+                        type="button"
+                        onClick={() => setActiveTurmaSegment(seg.id)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-white text-[#111827] shadow-xs'
+                            : 'text-[#6B7280] hover:text-[#111827]'
                         }`}
                       >
-                        {isChecked ? (
-                          <CheckSquare className="w-4 h-4 text-[#3B82F6] shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-[#9CA3AF] shrink-0" />
-                        )}
-                        <span className="text-xs font-medium truncate">{t.nome}</span>
-                      </div>
+                        <span>{seg.label}</span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
+                            segSelectedCount > 0
+                              ? 'bg-[#3B82F6] text-white'
+                              : 'bg-[#E5E7EB] text-[#6B7280]'
+                          }`}
+                        >
+                          {segSelectedCount}/{segTurmas.length}
+                        </span>
+                      </button>
                     );
                   })}
                 </div>
+
+                {/* Inside the Active Tab: Segment Header & Global Actions */}
+                <div className="bg-white border border-[#E5E7EB] rounded-xl p-3 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2.5 border-b border-[#F3F4F6] gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#111827]">
+                        {SEGMENTS_CONFIG.find((s) => s.id === activeTurmaSegment)?.label}
+                      </span>
+                      <span className="text-[11px] text-[#6B7280]">
+                        ({currentSegmentTurmas.filter((t) => selectedTurmaIds.includes(t.id)).length} de {currentSegmentTurmas.length} selecionadas)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSelectAllInSegment}
+                        className="text-[11px] font-bold text-[#3B82F6] hover:bg-[#EFF6FF] px-2.5 py-1 rounded-md border border-[#DBEAFE] transition-colors cursor-pointer"
+                      >
+                        Selecionar Todas do {SEGMENTS_CONFIG.find((s) => s.id === activeTurmaSegment)?.label}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeselectAllInSegment}
+                        className="text-[11px] font-semibold text-[#6B7280] hover:bg-[#F3F4F6] px-2.5 py-1 rounded-md border border-[#E5E7EB] transition-colors cursor-pointer"
+                      >
+                        Desmarcar Segmento
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Agrupamento por Ano / Série */}
+                  <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                    {Object.entries(groupedCurrentSegment).length === 0 ? (
+                      <div className="p-4 text-center text-xs text-[#9CA3AF]">
+                        Nenhuma turma cadastrada neste segmento.
+                      </div>
+                    ) : (
+                      (Object.entries(groupedCurrentSegment) as [string, Turma[]][]).map(([serie, serieTurmas]) => {
+                        const serieSelectedCount = serieTurmas.filter((t) =>
+                          selectedTurmaIds.includes(t.id)
+                        ).length;
+                        const isAllSerieSelected =
+                          serieTurmas.length > 0 &&
+                          serieSelectedCount === serieTurmas.length;
+
+                        return (
+                          <div
+                            key={serie}
+                            className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg p-2.5 space-y-2"
+                          >
+                            {/* Row Header with Year/Serie and quick toggle */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-[#111827]">
+                                  {serie}
+                                </span>
+                                <span className="text-[10px] font-semibold text-[#6B7280] bg-white px-1.5 py-0.5 rounded border border-[#E5E7EB]">
+                                  {serieSelectedCount}/{serieTurmas.length}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSeriesGroup(serieTurmas)}
+                                className="text-[10px] font-bold text-[#3B82F6] hover:underline cursor-pointer"
+                              >
+                                {isAllSerieSelected ? 'Desmarcar Ano' : 'Marcar Ano'}
+                              </button>
+                            </div>
+
+                            {/* Turmas in this Year/Serie */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                              {serieTurmas.map((t) => {
+                                const isChecked = selectedTurmaIds.includes(t.id);
+                                return (
+                                  <div
+                                    key={t.id}
+                                    onClick={() => handleToggleTurma(t.id)}
+                                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all border ${
+                                      isChecked
+                                        ? 'bg-[#EFF6FF] border-[#93C5FD] text-[#1E40AF] shadow-2xs'
+                                        : 'bg-white border-[#E5E7EB] hover:border-[#D1D5DB] text-[#374151]'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      {isChecked ? (
+                                        <CheckSquare className="w-3.5 h-3.5 text-[#3B82F6] shrink-0" />
+                                      ) : (
+                                        <Square className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+                                      )}
+                                      <span className="text-xs font-semibold truncate">
+                                        {t.nome}
+                                      </span>
+                                    </div>
+                                    <span
+                                      className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase shrink-0 ${
+                                        t.turno === 'Manhã'
+                                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                          : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                      }`}
+                                    >
+                                      {t.turno.slice(0, 1)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="pt-3 border-t border-[#F3F4F6] flex items-center justify-end gap-2">
+              {/* Modal Footer */}
+              <div className="pt-3 border-t border-[#F3F4F6] flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -401,7 +672,7 @@ export const AtribuicoesView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs bg-[#111827] hover:bg-[#1f2937] text-white font-bold rounded-lg cursor-pointer"
+                  className="px-5 py-2 text-xs bg-[#111827] hover:bg-[#1f2937] text-white font-bold rounded-lg cursor-pointer shadow-xs transition-colors"
                 >
                   Salvar Atribuições
                 </button>

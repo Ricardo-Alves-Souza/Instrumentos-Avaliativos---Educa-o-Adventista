@@ -117,6 +117,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
 
   // Estados do formulário
   const [selectedTurmas, setSelectedTurmas] = useState<InstrumentoTurmaEntrega[]>([]);
+  const [modalTurmaSegment, setModalTurmaSegment] = useState<string>('TODAS');
   const [disciplinaId, setDisciplinaId] = useState<string>('');
   const [numero, setNumero] = useState<number | ''>('');
   const [codigoIdentificador, setCodigoIdentificador] = useState<string>('');
@@ -235,6 +236,46 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     const firstDate = selectedTurmas[0].data;
     if (!firstDate) return;
     setSelectedTurmas(selectedTurmas.map((t) => ({ ...t, data: firstDate })));
+  };
+
+  // Segmentos disponíveis nas turmas acessíveis
+  const availableSegmentsInEffective = useMemo(() => {
+    const list: { id: string; label: string }[] = [];
+    if (effectiveTurmas.some((t) => t.nivel === 'Ensino Fundamental I')) {
+      list.push({ id: 'Ensino Fundamental I', label: 'Fundamental I' });
+    }
+    if (effectiveTurmas.some((t) => t.nivel === 'Ensino Fundamental II')) {
+      list.push({ id: 'Ensino Fundamental II', label: 'Fundamental II' });
+    }
+    if (effectiveTurmas.some((t) => t.nivel === 'Ensino Médio')) {
+      list.push({ id: 'Ensino Médio', label: 'Ensino Médio' });
+    }
+    return list;
+  }, [effectiveTurmas]);
+
+  const filteredEffectiveTurmas = useMemo(() => {
+    if (modalTurmaSegment === 'TODAS' || availableSegmentsInEffective.length <= 1) {
+      return effectiveTurmas;
+    }
+    return effectiveTurmas.filter((t) => t.nivel === modalTurmaSegment);
+  }, [effectiveTurmas, modalTurmaSegment, availableSegmentsInEffective]);
+
+  const handleSelectAllInModalSegment = () => {
+    const currentList = filteredEffectiveTurmas;
+    const currentIds = new Set(selectedTurmas.map((t) => t.turmaId));
+    const defaultDate = selectedTurmas[0]?.data || '';
+    const newItems: InstrumentoTurmaEntrega[] = [];
+    currentList.forEach((t) => {
+      if (!currentIds.has(t.id)) {
+        newItems.push({ turmaId: t.id, turmaNome: t.nome, data: defaultDate });
+      }
+    });
+    setSelectedTurmas([...selectedTurmas, ...newItems]);
+  };
+
+  const handleDeselectAllInModalSegment = () => {
+    const currentListIds = new Set(filteredEffectiveTurmas.map((t) => t.id));
+    setSelectedTurmas(selectedTurmas.filter((t) => !currentListIds.has(t.turmaId)));
   };
 
   // Critérios Avaliativos
@@ -553,9 +594,68 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
               )}
             </div>
 
+            {/* Segment Tabs if multiple segments are present */}
+            {availableSegmentsInEffective.length > 1 && (
+              <div className="space-y-2 pt-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1 p-0.5 bg-slate-200/80 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setModalTurmaSegment('TODAS')}
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-colors cursor-pointer ${
+                        modalTurmaSegment === 'TODAS'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Todas ({effectiveTurmas.length})
+                    </button>
+                    {availableSegmentsInEffective.map((seg) => {
+                      const segCount = effectiveTurmas.filter((t) => t.nivel === seg.id).length;
+                      const isSegActive = modalTurmaSegment === seg.id;
+                      return (
+                        <button
+                          key={seg.id}
+                          type="button"
+                          onClick={() => setModalTurmaSegment(seg.id)}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-colors cursor-pointer ${
+                            isSegActive
+                              ? 'bg-white text-slate-900 shadow-xs'
+                              : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          {seg.label} ({segCount})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllInModalSegment}
+                      className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
+                    >
+                      {modalTurmaSegment === 'TODAS'
+                        ? 'Marcar Todas'
+                        : `Marcar ${availableSegmentsInEffective.find((s) => s.id === modalTurmaSegment)?.label || ''}`}
+                    </button>
+                    <span className="text-slate-300">·</span>
+                    <button
+                      type="button"
+                      onClick={handleDeselectAllInModalSegment}
+                      className="text-[11px] font-semibold text-slate-500 hover:underline cursor-pointer"
+                    >
+                      Desmarcar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Turmas Checkboxes */}
             <div className="flex flex-wrap gap-2">
-              {effectiveTurmas.map((t) => {
+              {filteredEffectiveTurmas.map((t) => {
                 const isSelected = selectedTurmas.some((st) => st.turmaId === t.id);
                 return (
                   <button
