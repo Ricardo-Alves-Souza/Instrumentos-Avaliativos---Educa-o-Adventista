@@ -66,7 +66,7 @@ export const InstrumentosListView: React.FC<InstrumentosListViewProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isProfessor = currentUser.role === 'PROFESSOR';
-  const isLockedForProf = isProfessor && systemSettings.statusEdicao === 'BLOQUEADO';
+  const isLockedForProf = isProfessor && !canCreateInstrument();
 
   const accessibleTurmas = getAccessibleTurmas(currentUser);
   const accessibleDisciplinas = getAccessibleDisciplinas(currentUser);

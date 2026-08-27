@@ -57,6 +57,7 @@ export async function loadAllDataFromSupabase(): Promise<RemoteDataResult | null
         role: p.role,
         avatar: p.avatar,
         ativo: p.ativo !== false,
+        segmentosPermitidos: Array.isArray(p.segmentos_permitidos) ? p.segmentos_permitidos : undefined,
       }));
     } else if (profilesError) {
       console.error('Erro ao consultar tabela profiles no Supabase:', profilesError.message);
@@ -128,9 +129,23 @@ export async function loadAllDataFromSupabase(): Promise<RemoteDataResult | null
 
     let loadedSettings: SystemSettings = initialSystemSettings;
     if (!settError && settData) {
+      const defaultLiberados = initialSystemSettings.instrumentos_liberados;
+      const parsedLiberados = settData.instrumentos_liberados && typeof settData.instrumentos_liberados === 'object'
+        ? {
+            FUNDAMENTAL_1: settData.instrumentos_liberados.FUNDAMENTAL_1 !== false,
+            FUNDAMENTAL_2: settData.instrumentos_liberados.FUNDAMENTAL_2 !== false,
+            ENSINO_MEDIO: settData.instrumentos_liberados.ENSINO_MEDIO !== false,
+          }
+        : {
+            FUNDAMENTAL_1: settData.status_edicao !== 'BLOQUEADO',
+            FUNDAMENTAL_2: settData.status_edicao !== 'BLOQUEADO',
+            ENSINO_MEDIO: settData.status_edicao !== 'BLOQUEADO',
+          };
+
       loadedSettings = {
-        bimestreAtual: settData.bimestre_atual,
-        statusEdicao: settData.status_edicao,
+        bimestreAtual: settData.bimestre_atual ?? initialSystemSettings.bimestreAtual,
+        statusEdicao: settData.status_edicao || (Object.values(parsedLiberados).some(Boolean) ? 'LIBERADO' : 'BLOQUEADO'),
+        instrumentos_liberados: parsedLiberados,
       };
     }
 
@@ -247,11 +262,20 @@ export async function seedInitialDataToSupabase(): Promise<void> {
     await client.from('atribuicoes').upsert(atribPayload, { onConflict: 'id' });
 
     // Inserir Configurações
-    await client.from('system_settings').upsert({
-      id: 'global',
-      bimestre_atual: initialSystemSettings.bimestreAtual,
-      status_edicao: initialSystemSettings.statusEdicao,
-    });
+    try {
+      await client.from('system_settings').upsert({
+        id: 'global',
+        bimestre_atual: initialSystemSettings.bimestreAtual,
+        status_edicao: initialSystemSettings.statusEdicao,
+        instrumentos_liberados: initialSystemSettings.instrumentos_liberados,
+      });
+    } catch (settErr) {
+      await client.from('system_settings').upsert({
+        id: 'global',
+        bimestre_atual: initialSystemSettings.bimestreAtual,
+        status_edicao: initialSystemSettings.statusEdicao,
+      });
+    }
   } catch (e) {
     console.warn('Seed no Supabase:', e);
   }
@@ -327,21 +351,43 @@ export async function dbCreateUserWithAuth(
     }
 
     // 2. Persistir perfil correspondente na tabela 'profiles'
-    const profilePayload = {
+    const profilePayload: Record<string, any> = {
       id: userId,
       nome: userData.nome.trim(),
       email: cleanEmail,
       role: userData.role,
       avatar: userData.avatar || null,
       ativo: userData.ativo !== false,
+      segmentos_permitidos: userData.role === 'COORDENADOR' ? (userData.segmentosPermitidos || []) : null,
       updated_at: new Date().toISOString(),
     };
 
-    const { data: pData, error: pError } = await client
+    let pData: any = null;
+    let pError: any = null;
+
+    const res = await client
       .from('profiles')
       .upsert(profilePayload, { onConflict: 'id' })
       .select()
       .single();
+
+    pData = res.data;
+    pError = res.error;
+
+    // Fallback gracioso caso a coluna 'segmentos_permitidos' ainda não tenha sido criada no Supabase SQL
+    if (pError && (pError.code === 'PGRST204' || pError.message?.includes('segmentos_permitidos'))) {
+      const fallbackPayload = { ...profilePayload };
+      delete fallbackPayload.segmentos_permitidos;
+
+      const fallbackRes = await client
+        .from('profiles')
+        .upsert(fallbackPayload, { onConflict: 'id' })
+        .select()
+        .single();
+
+      pData = fallbackRes.data;
+      pError = fallbackRes.error;
+    }
 
     if (pError) {
       console.error('Erro ao salvar tabela profiles:', pError);
@@ -358,6 +404,9 @@ export async function dbCreateUserWithAuth(
       role: pData.role,
       avatar: pData.avatar,
       ativo: pData.ativo !== false,
+      segmentosPermitidos: Array.isArray(pData.segmentos_permitidos)
+        ? pData.segmentos_permitidos
+        : (userData.role === 'COORDENADOR' ? userData.segmentosPermitidos : undefined),
     };
 
     return {
@@ -378,15 +427,26 @@ export async function dbSaveUserProfile(user: User): Promise<DbResult> {
   if (!client) return { success: false, error: 'Supabase não conectado' };
 
   try {
-    const { error } = await client.from('profiles').upsert({
+    const profilePayload: Record<string, any> = {
       id: user.id,
       nome: user.nome,
       email: user.email.toLowerCase(),
       role: user.role,
       avatar: user.avatar || null,
       ativo: user.ativo !== false,
+      segmentos_permitidos: user.role === 'COORDENADOR' ? (user.segmentosPermitidos || []) : null,
       updated_at: new Date().toISOString(),
-    });
+    };
+
+    let { error } = await client.from('profiles').upsert(profilePayload);
+
+    // Fallback gracioso se a coluna 'segmentos_permitidos' ainda não existir na tabela profiles do Supabase
+    if (error && (error.code === 'PGRST204' || error.message?.includes('segmentos_permitidos'))) {
+      const fallbackPayload = { ...profilePayload };
+      delete fallbackPayload.segmentos_permitidos;
+      const retryResult = await client.from('profiles').upsert(fallbackPayload);
+      error = retryResult.error;
+    }
 
     if (error) {
       console.error('Erro dbSaveUserProfile:', error);
@@ -669,12 +729,22 @@ export async function dbSaveSystemSettings(settings: SystemSettings): Promise<Db
   if (!client) return { success: false, error: 'Supabase não conectado' };
 
   try {
-    const { error } = await client.from('system_settings').upsert({
+    const payload: Record<string, any> = {
       id: 'global',
       bimestre_atual: settings.bimestreAtual,
-      status_edicao: settings.statusEdicao,
+      status_edicao: settings.statusEdicao || (Object.values(settings.instrumentos_liberados).some(Boolean) ? 'LIBERADO' : 'BLOQUEADO'),
+      instrumentos_liberados: settings.instrumentos_liberados,
       updated_at: new Date().toISOString(),
-    });
+    };
+
+    let { error } = await client.from('system_settings').upsert(payload);
+
+    if (error && (error.code === 'PGRST204' || error.message?.includes('instrumentos_liberados'))) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.instrumentos_liberados;
+      const retryResult = await client.from('system_settings').upsert(fallbackPayload);
+      error = retryResult.error;
+    }
 
     if (error) {
       console.error('Erro dbSaveSystemSettings:', error);

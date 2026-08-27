@@ -1,5 +1,7 @@
 export type UserRole = 'SUPER_ADMIN' | 'COORDENADOR' | 'PROFESSOR';
 
+export type SegmentoEscolar = 'FUNDAMENTAL_1' | 'FUNDAMENTAL_2' | 'ENSINO_MEDIO';
+
 export type InstrumentoStatus =
   | 'RASCUNHO'
   | 'ENVIADO'
@@ -14,6 +16,7 @@ export interface User {
   role: UserRole;
   avatar?: string;
   ativo?: boolean;
+  segmentosPermitidos?: SegmentoEscolar[]; // Vínculo de segmentos para COORDENADOR
 }
 
 export interface CriterioAvaliativo {
@@ -101,9 +104,16 @@ export interface Atribuicao {
   turmaIds: string[];
 }
 
+export interface InstrumentosLiberadosMap {
+  FUNDAMENTAL_1: boolean;
+  FUNDAMENTAL_2: boolean;
+  ENSINO_MEDIO: boolean;
+}
+
 export interface SystemSettings {
   bimestreAtual: number; // 1, 2, 3, 4
-  statusEdicao: 'LIBERADO' | 'BLOQUEADO';
+  statusEdicao?: 'LIBERADO' | 'BLOQUEADO'; // legado para retrocompatibilidade
+  instrumentos_liberados: InstrumentosLiberadosMap;
 }
 
 export interface ExportOptions {

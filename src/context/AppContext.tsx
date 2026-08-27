@@ -8,7 +8,22 @@ import {
   Atribuicao,
   SystemSettings,
   TipoInstrumentoItem,
+  SegmentoEscolar,
 } from '../types';
+
+export function getSegmentFromTurma(turma?: { nivel?: string; serie?: string } | null): SegmentoEscolar {
+  if (!turma) return 'FUNDAMENTAL_1';
+  const nivel = (turma.nivel || '').toLowerCase();
+  const serie = (turma.serie || '').toLowerCase();
+
+  if (nivel.includes('médio') || nivel.includes('medio') || serie.includes('médio') || serie.includes('medio')) {
+    return 'ENSINO_MEDIO';
+  }
+  if (nivel.includes('fundamental ii') || nivel.includes('fundamental 2') || /^[6-9][ºª]/.test(serie)) {
+    return 'FUNDAMENTAL_2';
+  }
+  return 'FUNDAMENTAL_1';
+}
 import {
   initialTurmas,
   initialDisciplinas,
@@ -126,8 +141,9 @@ interface AppContextType {
   getInstrumentosForTurma: (turmaId: string, bimestre?: number) => InstrumentoAvaliativo[];
   getDeliveryDateForTurma: (inst: InstrumentoAvaliativo, turmaId: string) => string;
   isInstrumentOwner: (inst: InstrumentoAvaliativo, user?: User) => boolean;
+  isSegmentLiberado: (segmento: SegmentoEscolar) => boolean;
   canEditInstrument: (inst: InstrumentoAvaliativo) => boolean;
-  canCreateInstrument: () => boolean;
+  canCreateInstrument: (turma?: Turma | null) => boolean;
   canApproveOrReject: () => boolean;
   resetAllData: () => void;
 }
@@ -1036,8 +1052,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const getAccessibleTurmas = (user: User = currentUser): Turma[] => {
-    if (user.role === 'SUPER_ADMIN' || user.role === 'COORDENADOR') {
+    if (user.role === 'SUPER_ADMIN') {
       return turmas;
+    }
+    if (user.role === 'COORDENADOR') {
+      // Se não tiver segmentos definidos ou vazios, mantém acesso a todas por segurança / legado
+      if (!user.segmentosPermitidos || user.segmentosPermitidos.length === 0) {
+        return turmas;
+      }
+      return turmas.filter((t) => {
+        const seg = getSegmentFromTurma(t);
+        return user.segmentosPermitidos?.includes(seg);
+      });
     }
     return getProfessorTurmas(user.id);
   };
@@ -1050,8 +1076,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const getAccessibleInstrumentos = (user: User = currentUser): InstrumentoAvaliativo[] => {
-    if (user.role === 'SUPER_ADMIN' || user.role === 'COORDENADOR') {
+    if (user.role === 'SUPER_ADMIN') {
       return instrumentos;
+    }
+    if (user.role === 'COORDENADOR') {
+      if (!user.segmentosPermitidos || user.segmentosPermitidos.length === 0) {
+        return instrumentos;
+      }
+      const allowedTurmaIds = new Set(getAccessibleTurmas(user).map((t) => t.id));
+      return instrumentos.filter((i) => {
+        const matchesPrimary = allowedTurmaIds.has(i.turmaId);
+        const matchesAnyMulti = Array.isArray(i.turmas) && i.turmas.some((t) => allowedTurmaIds.has(t.turmaId));
+        return matchesPrimary || matchesAnyMulti;
+      });
     }
     return instrumentos.filter((i) => i.professorId === user.id);
   };
@@ -1087,17 +1124,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return inst.professorId === user.id;
   };
 
+  const isSegmentLiberado = (segmento: SegmentoEscolar): boolean => {
+    if (systemSettings.instrumentos_liberados && typeof systemSettings.instrumentos_liberados === 'object') {
+      return systemSettings.instrumentos_liberados[segmento] !== false;
+    }
+    return systemSettings.statusEdicao !== 'BLOQUEADO';
+  };
+
   const canEditInstrument = (inst: InstrumentoAvaliativo): boolean => {
-    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR') {
+    if (currentUser.role === 'SUPER_ADMIN') {
       return true;
     }
+    if (currentUser.role === 'COORDENADOR') {
+      if (!currentUser.segmentosPermitidos || currentUser.segmentosPermitidos.length === 0) {
+        return true;
+      }
+      const allowedTurmaIds = new Set(getAccessibleTurmas(currentUser).map((t) => t.id));
+      const hasPermission =
+        allowedTurmaIds.has(inst.turmaId) ||
+        (Array.isArray(inst.turmas) && inst.turmas.some((t) => allowedTurmaIds.has(t.turmaId)));
+      return hasPermission;
+    }
+    // Professor: verificar se o segmento está liberado e status é editável
     if (inst.professorId !== currentUser.id) {
       return false;
     }
+
+    // Verificar se o segmento das turmas do instrumento está liberado
+    const primaryTurma = turmas.find((t) => t.id === inst.turmaId);
+    const seg = getSegmentFromTurma(primaryTurma);
+    const segmentLiberado = isSegmentLiberado(seg);
+
+    if (!segmentLiberado && inst.status !== 'LIBERADO_MODIFICACAO') {
+      return false;
+    }
+
     return inst.status === 'RASCUNHO' || inst.status === 'LIBERADO_MODIFICACAO';
   };
 
-  const canCreateInstrument = (): boolean => {
+  const canCreateInstrument = (turma?: Turma | null): boolean => {
+    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR') {
+      return true;
+    }
+    if (currentUser.role === 'PROFESSOR') {
+      if (turma) {
+        const seg = getSegmentFromTurma(turma);
+        return isSegmentLiberado(seg);
+      }
+      // Se nenhuma turma específica for passada, verificar se pelo menos um segmento das turmas do professor está liberado
+      const profTurmas = getProfessorTurmas(currentUser.id);
+      if (profTurmas.length === 0) return true;
+      return profTurmas.some((t) => isSegmentLiberado(getSegmentFromTurma(t)));
+    }
     return true;
   };
 
@@ -1175,6 +1253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getInstrumentosForTurma,
         getDeliveryDateForTurma,
         isInstrumentOwner,
+        isSegmentLiberado,
         canEditInstrument,
         canCreateInstrument,
         canApproveOrReject,

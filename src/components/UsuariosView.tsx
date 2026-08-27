@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Users,
-  UserCheck,
   UserPlus,
   Shield,
   ShieldCheck,
@@ -14,11 +13,16 @@ import {
   AlertOctagon,
   KeyRound,
   Power,
-  RefreshCw,
-  Send,
+  Layers,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { User, UserRole } from '../types';
+import { User, UserRole, SegmentoEscolar } from '../types';
+
+const SEGMENTOS_OPTIONS: { id: SegmentoEscolar; label: string; badge: string }[] = [
+  { id: 'FUNDAMENTAL_1', label: 'Fundamental I', badge: '1º ao 5º Ano' },
+  { id: 'FUNDAMENTAL_2', label: 'Fundamental II', badge: '6º ao 9º Ano' },
+  { id: 'ENSINO_MEDIO', label: 'Ensino Médio', badge: '1ª à 3ª Série' },
+];
 
 export const UsuariosView: React.FC = () => {
   const {
@@ -31,8 +35,6 @@ export const UsuariosView: React.FC = () => {
     toggleUserActive,
     currentUser,
     baseUser,
-    disciplinas,
-    turmas,
     atribuicoes,
   } = useApp();
 
@@ -45,6 +47,7 @@ export const UsuariosView: React.FC = () => {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('PROFESSOR');
+  const [segmentosPermitidos, setSegmentosPermitidos] = useState<SegmentoEscolar[]>([]);
   const [userPassword, setUserPassword] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -90,21 +93,34 @@ export const UsuariosView: React.FC = () => {
       setNome(u.nome);
       setEmail(u.email);
       setRole(u.role);
+      setSegmentosPermitidos(u.segmentosPermitidos || (u.role === 'COORDENADOR' ? ['FUNDAMENTAL_1', 'FUNDAMENTAL_2', 'ENSINO_MEDIO'] : []));
       setUserPassword('');
     } else {
       setEditingUser(null);
       setNome('');
       setEmail('');
       setRole('PROFESSOR');
+      setSegmentosPermitidos(['FUNDAMENTAL_1', 'FUNDAMENTAL_2', 'ENSINO_MEDIO']);
       setUserPassword('');
     }
     setIsModalOpen(true);
+  };
+
+  const handleToggleSegmentoCheckbox = (segId: SegmentoEscolar) => {
+    setSegmentosPermitidos((prev) =>
+      prev.includes(segId) ? prev.filter((s) => s !== segId) : [...prev, segId]
+    );
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     if (!nome.trim() || !email.trim()) return;
+
+    if (role === 'COORDENADOR' && segmentosPermitidos.length === 0) {
+      setFormError('Selecione pelo menos 1 segmento escolar para o Coordenador.');
+      return;
+    }
 
     if (!editingUser && userPassword && userPassword.length < 6) {
       setFormError('A senha inicial deve ter pelo menos 6 caracteres.');
@@ -126,6 +142,7 @@ export const UsuariosView: React.FC = () => {
           nome: nome.trim(),
           email: email.trim().toLowerCase(),
           role,
+          segmentosPermitidos: role === 'COORDENADOR' ? segmentosPermitidos : undefined,
         });
       } else {
         if (!isSuperAdmin && role === 'SUPER_ADMIN') {
@@ -140,6 +157,7 @@ export const UsuariosView: React.FC = () => {
             email: email.trim().toLowerCase(),
             role,
             ativo: true,
+            segmentosPermitidos: role === 'COORDENADOR' ? segmentosPermitidos : undefined,
           },
           undefined,
           userPassword || undefined
@@ -160,12 +178,11 @@ export const UsuariosView: React.FC = () => {
     setIsResetModalOpen(true);
   };
 
+  // Send Supabase Reset Password Email
   const handleExecuteResetPassword = async () => {
     if (!resetTargetUser) return;
-
-    setResetStatus({ loading: true });
-
     try {
+      setResetStatus({ loading: true });
       const res = await resetUserPassword(resetTargetUser.id, resetTargetUser.email);
       if (res.success) {
         setResetStatus({
@@ -236,6 +253,33 @@ export const UsuariosView: React.FC = () => {
     }
   };
 
+  const renderCoordinatorSegments = (u: User) => {
+    if (u.role !== 'COORDENADOR') return null;
+    const segments = u.segmentosPermitidos;
+    if (!segments || segments.length === 0) {
+      return (
+        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+          Todos os Segmentos
+        </span>
+      );
+    }
+    return (
+      <div className="flex flex-wrap gap-1">
+        {segments.map((s) => {
+          const opt = SEGMENTOS_OPTIONS.find((o) => o.id === s);
+          return (
+            <span
+              key={s}
+              className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200"
+            >
+              {opt?.label || s}
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -246,56 +290,46 @@ export const UsuariosView: React.FC = () => {
             Gestão de Usuários e Permissões
           </h1>
           <p className="text-xs text-[#6B7280] mt-0.5">
-            Cadastre professores, coordenadores e gerencie acessos, senhas e perfis com persistência no Supabase.
+            Cadastre professores, coordenadores, defina segmentos de atuação e gerencie acessos e senhas com segurança.
           </p>
         </div>
 
-        {isAuthorized && (
-          <button
-            id="btn-novo-usuario"
-            type="button"
-            onClick={() => handleOpenModal()}
-            className="inline-flex items-center gap-2 bg-[#111827] hover:bg-[#1f2937] text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Novo Usuário</span>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => handleOpenModal()}
+          className="bg-[#111827] hover:bg-[#1f2937] text-white px-4 py-2.5 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-2 shadow-xs"
+        >
+          <UserPlus className="w-4 h-4" />
+          <span>Novo Usuário</span>
+        </button>
       </div>
 
-      {/* Persona Notice Bar */}
-      <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded-xl p-4 flex items-center justify-between text-xs text-[#1E40AF]">
-        <div className="flex items-center gap-2.5">
-          <UserCheck className="w-4 h-4 text-[#3B82F6] shrink-0" />
-          <span>
-            Usuário conectado: <strong>{currentUser.nome}</strong> ({currentUser.role === 'SUPER_ADMIN' ? 'Super Administrador' : currentUser.role === 'COORDENADOR' ? 'Coordenação Pedagógica' : 'Professor'})
-          </span>
-        </div>
-      </div>
-
-      {/* Filters & Search */}
-      <div className="bg-white p-4 rounded-xl border border-[#E5E7EB] shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* Filter and Search Bar */}
+      <div className="bg-white p-4 rounded-xl border border-[#E5E7EB] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
           <input
             type="text"
-            placeholder="Buscar por nome ou e-mail..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
+            placeholder="Buscar por nome ou e-mail institucional..."
+            className="w-full pl-9 pr-3 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
           />
         </div>
 
-        <select
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className="text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 bg-[#F9FAFB] text-[#111827] font-medium"
-        >
-          <option value="all">Todas as Funções</option>
-          {isSuperAdmin && <option value="SUPER_ADMIN">Super Administrador</option>}
-          <option value="COORDENADOR">Coordenador</option>
-          <option value="PROFESSOR">Professor</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-[#6B7280]">Filtrar por perfil:</label>
+          <select
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 bg-[#F9FAFB] text-[#111827] font-medium"
+          >
+            <option value="all">Todos os Perfis ({accessibleUsers.length})</option>
+            <option value="PROFESSOR">Professores</option>
+            <option value="COORDENADOR">Coordenadores</option>
+            {isSuperAdmin && <option value="SUPER_ADMIN">Super Administradores</option>}
+          </select>
+        </div>
       </div>
 
       {/* Users List Grid */}
@@ -340,6 +374,16 @@ export const UsuariosView: React.FC = () => {
                   </span>
                 </div>
 
+                {u.role === 'COORDENADOR' && (
+                  <div className="text-[11px] text-[#6B7280] space-y-1.5 bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">
+                    <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <Layers className="w-3 h-3 text-blue-600" />
+                      <span>Segmentos Vinculados:</span>
+                    </div>
+                    {renderCoordinatorSegments(u)}
+                  </div>
+                )}
+
                 {u.role === 'PROFESSOR' && (
                   <div className="text-[11px] text-[#6B7280] space-y-1 bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">
                     <div className="flex justify-between">
@@ -368,13 +412,13 @@ export const UsuariosView: React.FC = () => {
                 </span>
 
                 <div className="flex items-center gap-1 ml-auto">
-                  {/* Redefinir Senha (Super Admin) */}
+                  {/* Redefinir Senha: Somente Super Admin */}
                   {isSuperAdmin && (
                     <button
                       type="button"
                       onClick={() => handleOpenResetModal(u)}
                       className="p-1.5 text-[#6B7280] hover:text-amber-600 hover:bg-amber-50 rounded cursor-pointer transition-colors"
-                      title="Enviar Link de Redefinição de Senha (Supabase Auth)"
+                      title="Solicitar Redefinição de Senha no Supabase"
                     >
                       <KeyRound className="w-3.5 h-3.5" />
                     </button>
@@ -408,23 +452,23 @@ export const UsuariosView: React.FC = () => {
                     </button>
                   )}
 
-                    {/* Excluir Usuário */}
-                    {u.id !== currentUser.id && (isSuperAdmin || u.role !== 'SUPER_ADMIN') && (
-                      <button
-                        type="button"
-                        onClick={() => setUserToDelete(u)}
-                        className="p-1.5 text-[#6B7280] hover:text-red-600 hover:bg-red-50 rounded cursor-pointer transition-colors"
-                        title="Excluir Usuário"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  {/* Excluir Usuário */}
+                  {u.id !== currentUser.id && (isSuperAdmin || u.role !== 'SUPER_ADMIN') && (
+                    <button
+                      type="button"
+                      onClick={() => setUserToDelete(u)}
+                      className="p-1.5 text-[#6B7280] hover:text-red-600 hover:bg-red-50 rounded cursor-pointer transition-colors"
+                      title="Excluir Usuário"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
+      </div>
 
       {/* MODAL CRIAÇÃO / EDIÇÃO DE USUÁRIO */}
       {isModalOpen && (
@@ -502,7 +546,13 @@ export const UsuariosView: React.FC = () => {
                 </label>
                 <select
                   value={role}
-                  onChange={(e) => setRole(e.target.value as UserRole)}
+                  onChange={(e) => {
+                    const newRole = e.target.value as UserRole;
+                    setRole(newRole);
+                    if (newRole === 'COORDENADOR' && segmentosPermitidos.length === 0) {
+                      setSegmentosPermitidos(['FUNDAMENTAL_1', 'FUNDAMENTAL_2', 'ENSINO_MEDIO']);
+                    }
+                  }}
                   className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] font-medium"
                 >
                   <option value="PROFESSOR">Professor (Docente)</option>
@@ -510,6 +560,52 @@ export const UsuariosView: React.FC = () => {
                   {isSuperAdmin && <option value="SUPER_ADMIN">Super Administrador</option>}
                 </select>
               </div>
+
+              {/* Vínculo de Segmentos Escolares para COORDENADOR */}
+              {role === 'COORDENADOR' && (
+                <div className="bg-[#F9FAFB] p-3.5 rounded-lg border border-[#E5E7EB] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Segmentos de Atuação do Coordenador
+                    </label>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      (Múltipla escolha)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    O coordenador terá visibilidade e aprovação restritas às turmas dos segmentos marcados abaixo.
+                  </p>
+
+                  <div className="space-y-2 pt-1">
+                    {SEGMENTOS_OPTIONS.map((seg) => {
+                      const isChecked = segmentosPermitidos.includes(seg.id);
+                      return (
+                        <label
+                          key={seg.id}
+                          className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-blue-50/70 border-blue-300 text-blue-900 font-semibold'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleSegmentoCheckbox(seg.id)}
+                              className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <span className="text-xs">{seg.label}</span>
+                          </div>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-500 font-medium">
+                            {seg.badge}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="pt-3 border-t border-[#F3F4F6] flex items-center justify-end gap-2">
                 <button
@@ -583,21 +679,11 @@ export const UsuariosView: React.FC = () => {
                 {!resetStatus.success && (
                   <button
                     type="button"
-                    onClick={handleExecuteResetPassword}
                     disabled={resetStatus.loading}
-                    className="px-5 py-2 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    onClick={handleExecuteResetPassword}
+                    className="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                   >
-                    {resetStatus.loading ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Enviando link...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-3.5 h-3.5" />
-                        <span>Enviar Link por E-mail</span>
-                      </>
-                    )}
+                    {resetStatus.loading ? 'Enviando link...' : 'Enviar Link de Redefinição'}
                   </button>
                 )}
               </div>
@@ -606,64 +692,37 @@ export const UsuariosView: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL CONFIRMAÇÃO DE EXCLUSÃO DE USUÁRIO */}
+      {/* MODAL CONFIRMAR EXCLUSÃO */}
       {userToDelete && (
         <div className="fixed inset-0 z-50 bg-[#111827]/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-xl shadow-xl border border-[#E5E7EB] overflow-hidden">
-            <div className="px-6 py-4 border-b border-[#F3F4F6] flex items-center justify-between">
-              <div className="flex items-center gap-2 text-red-600">
-                <Trash2 className="w-4 h-4" />
-                <h3 className="text-sm font-bold text-[#111827]">
-                  Confirmar Exclusão de Usuário
-                </h3>
-              </div>
+          <div className="bg-white w-full max-w-sm rounded-xl shadow-xl border border-[#E5E7EB] overflow-hidden p-6 space-y-4">
+            <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div className="text-center">
+              <h3 className="text-sm font-bold text-[#111827]">Excluir Usuário</h3>
+              <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">
+                Tem certeza que deseja remover <strong>{userToDelete.nome}</strong>?
+                Esta operação remove o perfil e revoga os acessos correspondentes.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 pt-2">
               <button
                 type="button"
+                disabled={isDeleting}
                 onClick={() => setUserToDelete(null)}
-                className="text-[#9CA3AF] hover:text-[#111827] p-1 rounded-md cursor-pointer"
+                className="flex-1 px-4 py-2 text-xs text-[#374151] hover:bg-[#F3F4F6] rounded-lg font-medium border border-[#E5E7EB] cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                Cancelar
               </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <p className="text-xs text-[#374151] leading-relaxed">
-                Tem certeza de que deseja excluir permanentemente o usuário{' '}
-                <strong className="text-[#111827]">{userToDelete.nome}</strong> (
-                {userToDelete.email})?
-              </p>
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
-                <strong>Atenção:</strong> Esta ação removerá o perfil do banco de dados e todas as suas atribuições de turmas e disciplinas vinculadas.
-              </div>
-
-              <div className="pt-3 border-t border-[#F3F4F6] flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setUserToDelete(null)}
-                  className="px-4 py-2 text-xs text-[#6B7280] hover:bg-[#F3F4F6] rounded-lg font-medium cursor-pointer"
-                  disabled={isDeleting}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmDelete}
-                  disabled={isDeleting}
-                  className="px-5 py-2 text-xs bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {isDeleting ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Excluindo...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Sim, Excluir Definitivamente</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="flex-1 px-4 py-2 text-xs bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? 'Excluindo...' : 'Sim, Excluir'}
+              </button>
             </div>
           </div>
         </div>

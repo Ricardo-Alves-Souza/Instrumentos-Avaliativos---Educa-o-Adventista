@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   Calendar,
@@ -8,36 +8,113 @@ import {
   AlertTriangle,
   RotateCcw,
   ShieldCheck,
-  Sparkles,
+  GraduationCap,
+  Layers,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { InstrumentosLiberadosMap, SegmentoEscolar } from '../types';
+
+interface SegmentControlConfig {
+  id: SegmentoEscolar;
+  label: string;
+  badge: string;
+  description: string;
+}
+
+const SEGMENTS: SegmentControlConfig[] = [
+  {
+    id: 'FUNDAMENTAL_1',
+    label: 'Ensino Fundamental I',
+    badge: '1º ao 5º Ano',
+    description: 'Controla a criação e alteração de instrumentos nas turmas de 1º ao 5º Ano.',
+  },
+  {
+    id: 'FUNDAMENTAL_2',
+    label: 'Ensino Fundamental II',
+    badge: '6º ao 9º Ano',
+    description: 'Controla a criação e alteração de instrumentos nas turmas de 6º ao 9º Ano.',
+  },
+  {
+    id: 'ENSINO_MEDIO',
+    label: 'Ensino Médio',
+    badge: '1ª à 3ª Série',
+    description: 'Controla a criação e alteração de instrumentos nas turmas de 1ª à 3ª Série do EM.',
+  },
+];
 
 export const ConfiguracoesView: React.FC = () => {
   const { systemSettings, updateSystemSettings, currentUser, resetAllData } = useApp();
+
   const [bimestre, setBimestre] = useState<number>(systemSettings.bimestreAtual);
-  const [statusEdicao, setStatusEdicao] = useState<'LIBERADO' | 'BLOQUEADO'>(
-    systemSettings.statusEdicao
-  );
+  const [liberados, setLiberados] = useState<InstrumentosLiberadosMap>(() => {
+    if (systemSettings.instrumentos_liberados && typeof systemSettings.instrumentos_liberados === 'object') {
+      return {
+        FUNDAMENTAL_1: systemSettings.instrumentos_liberados.FUNDAMENTAL_1 !== false,
+        FUNDAMENTAL_2: systemSettings.instrumentos_liberados.FUNDAMENTAL_2 !== false,
+        ENSINO_MEDIO: systemSettings.instrumentos_liberados.ENSINO_MEDIO !== false,
+      };
+    }
+    const isGlobalLiberado = systemSettings.statusEdicao !== 'BLOQUEADO';
+    return {
+      FUNDAMENTAL_1: isGlobalLiberado,
+      FUNDAMENTAL_2: isGlobalLiberado,
+      ENSINO_MEDIO: isGlobalLiberado,
+    };
+  });
+
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
+
+  // Sync state if systemSettings changes externally
+  useEffect(() => {
+    setBimestre(systemSettings.bimestreAtual);
+    if (systemSettings.instrumentos_liberados && typeof systemSettings.instrumentos_liberados === 'object') {
+      setLiberados({
+        FUNDAMENTAL_1: systemSettings.instrumentos_liberados.FUNDAMENTAL_1 !== false,
+        FUNDAMENTAL_2: systemSettings.instrumentos_liberados.FUNDAMENTAL_2 !== false,
+        ENSINO_MEDIO: systemSettings.instrumentos_liberados.ENSINO_MEDIO !== false,
+      });
+    }
+  }, [systemSettings]);
 
   const isAuthorized = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR';
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleToggleSegment = (segId: SegmentoEscolar, value: boolean) => {
+    setLiberados((prev) => ({
+      ...prev,
+      [segId]: value,
+    }));
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSystemSettings({
-      bimestreAtual: bimestre,
-      statusEdicao,
-    });
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    try {
+      setIsSaving(true);
+      const isAnyLiberado = Object.values(liberados).some(Boolean);
+      await updateSystemSettings({
+        bimestreAtual: bimestre,
+        statusEdicao: isAnyLiberado ? 'LIBERADO' : 'BLOQUEADO',
+        instrumentos_liberados: liberados,
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3500);
+    } catch (err) {
+      console.error('Erro ao salvar configurações:', err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleReset = () => {
     resetAllData();
     setShowResetConfirm(false);
     setBimestre(3);
-    setStatusEdicao('LIBERADO');
+    setLiberados({
+      FUNDAMENTAL_1: true,
+      FUNDAMENTAL_2: true,
+      ENSINO_MEDIO: true,
+    });
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   };
@@ -50,7 +127,7 @@ export const ConfiguracoesView: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-amber-900">Acesso Restrito</h3>
             <p className="text-xs text-amber-700 mt-1">
-              Apenas Coordenadores e Super Administradores têm permissão para alterar as configurações globais do sistema.
+              Apenas Coordenadores e Super Administradores têm permissão para alterar as configurações do sistema.
             </p>
           </div>
         </div>
@@ -72,14 +149,14 @@ export const ConfiguracoesView: React.FC = () => {
           Configurações Gerais
         </h1>
         <p className="text-xs text-[#6B7280] mt-0.5">
-          Defina o período avaliativo vigente e o controle de permissão para criação e edição de instrumentos pelos professores.
+          Defina o período avaliativo vigente e o controle individual de permissão de instrumentos por segmento escolar.
         </p>
       </div>
 
       {saveSuccess && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-2 text-xs font-semibold">
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-2 text-xs font-semibold shadow-xs animate-in fade-in duration-200">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          Configurações salvas e aplicadas a todo o sistema com sucesso!
+          Configurações salvas e aplicadas com sucesso a todos os segmentos!
         </div>
       )}
 
@@ -110,7 +187,7 @@ export const ConfiguracoesView: React.FC = () => {
                   onClick={() => setBimestre(b)}
                   className={`p-3.5 rounded-xl border text-center transition-all cursor-pointer ${
                     isSelected
-                      ? 'border-[#3B82F6] bg-[#EFF6FF] text-[#1E40AF] font-bold shadow-xs'
+                      ? 'border-[#3B82F6] bg-[#EFF6FF] text-[#1E40AF] font-bold shadow-xs ring-2 ring-[#3B82F6]/20'
                       : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] hover:border-[#D1D5DB] font-medium'
                   }`}
                 >
@@ -124,72 +201,85 @@ export const ConfiguracoesView: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Bloqueio de Instrumentos */}
-        <div className="bg-white border border-[#E5E7EB] rounded-xl p-6 shadow-xs space-y-4">
+        {/* Card 2: Status de Edição dos Instrumentos por Segmento */}
+        <div className="bg-white border border-[#E5E7EB] rounded-xl p-6 shadow-xs space-y-5">
           <div className="flex items-start gap-3">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-              statusEdicao === 'LIBERADO' ? 'bg-[#ECFDF5] text-[#10B981]' : 'bg-[#FEF2F2] text-[#EF4444]'
-            }`}>
-              {statusEdicao === 'LIBERADO' ? (
-                <Unlock className="w-5 h-5" />
-              ) : (
-                <Lock className="w-5 h-5" />
-              )}
+            <div className="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Layers className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-[#111827]">
-                Status de Edição dos Instrumentos (Professores)
+                Status de Edição dos Instrumentos por Segmento
               </h2>
               <p className="text-xs text-[#6B7280] mt-0.5 leading-relaxed">
-                Controla se os professores podem cadastrar novos instrumentos ou alterar os existentes. A coordenação e o Super Admin mantêm acesso permanente.
+                Controle individualmente quais etapas de ensino estão autorizadas a cadastrar e editar instrumentos avaliativos. A coordenação e o Super Admin mantêm acesso irrestrito.
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <div
-              onClick={() => setStatusEdicao('LIBERADO')}
-              className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                statusEdicao === 'LIBERADO'
-                  ? 'border-[#10B981] bg-[#ECFDF5]/60 text-[#065F46] ring-2 ring-[#10B981]/20'
-                  : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] hover:bg-white'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                  <Unlock className="w-4 h-4 text-[#10B981]" />
-                  LIBERADO
-                </span>
-                {statusEdicao === 'LIBERADO' && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]" />
-                )}
-              </div>
-              <p className="text-[11px] text-[#4B5563] leading-relaxed">
-                Professores podem criar novos instrumentos avaliativos e editar os existentes dentro de suas disciplinas e turmas atribuídas.
-              </p>
-            </div>
+          {/* 3 Linhas de Controle Individual por Segmento */}
+          <div className="space-y-3 pt-1">
+            {SEGMENTS.map((seg) => {
+              const isLiberado = liberados[seg.id] !== false;
 
-            <div
-              onClick={() => setStatusEdicao('BLOQUEADO')}
-              className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                statusEdicao === 'BLOQUEADO'
-                  ? 'border-[#EF4444] bg-[#FEF2F2]/60 text-[#991B1B] ring-2 ring-[#EF4444]/20'
-                  : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#374151] hover:bg-white'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                  <Lock className="w-4 h-4 text-[#EF4444]" />
-                  BLOQUEADO
-                </span>
-                {statusEdicao === 'BLOQUEADO' && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444]" />
-                )}
-              </div>
-              <p className="text-[11px] text-[#4B5563] leading-relaxed">
-                Professores ficam impossibilitados de cadastrar ou alterar instrumentos. O sistema rejeita alterações no backend e na interface.
-              </p>
-            </div>
+              return (
+                <div
+                  key={seg.id}
+                  className={`p-4 rounded-xl border transition-all ${
+                    isLiberado
+                      ? 'border-emerald-200 bg-emerald-50/40'
+                      : 'border-rose-200 bg-rose-50/40'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    {/* Left: Info */}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className={`w-4 h-4 shrink-0 ${isLiberado ? 'text-emerald-700' : 'text-rose-600'}`} />
+                        <h3 className="text-xs font-bold text-slate-900">
+                          {seg.label}
+                        </h3>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                          {seg.badge}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-1">
+                        {seg.description}
+                      </p>
+                    </div>
+
+                    {/* Right: Switch / Buttons */}
+                    <div className="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-lg border border-slate-200 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSegment(seg.id, true)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                          isLiberado
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Unlock className="w-3.5 h-3.5" />
+                        <span>Liberado</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSegment(seg.id, false)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                          !isLiberado
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Bloqueado</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -202,9 +292,10 @@ export const ConfiguracoesView: React.FC = () => {
 
           <button
             type="submit"
-            className="bg-[#111827] hover:bg-[#1f2937] text-white px-6 py-2.5 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-xs"
+            disabled={isSaving}
+            className="bg-[#111827] hover:bg-[#1f2937] text-white px-6 py-2.5 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-50"
           >
-            Salvar Configurações
+            {isSaving ? 'Salvando...' : 'Salvar Configurações'}
           </button>
         </div>
       </form>
@@ -218,7 +309,7 @@ export const ConfiguracoesView: React.FC = () => {
               Restaurar Dados Originais do Sistema
             </h3>
             <p className="text-[11px] text-[#6B7280] mt-0.5">
-              Restaura as 45 turmas completas, as 23 disciplinas na ordem acadêmica oficial, usuários e atribuições iniciais.
+              Restaura as turmas completas, disciplinas na ordem acadêmica oficial, usuários e configurações padrão de segmentos liberados.
             </p>
           </div>
 

@@ -22,7 +22,7 @@ import {
   CriterioAvaliativo,
   Habilidade,
 } from '../types';
-import { useApp } from '../context/AppContext';
+import { useApp, getSegmentFromTurma } from '../context/AppContext';
 import { AutoResizeTextarea } from './AutoResizeTextarea';
 
 interface CreateInstrumentoModalProps {
@@ -104,6 +104,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     enviarParaAprovacao,
     addInstrumento,
     updateInstrumento,
+    isSegmentLiberado,
   } = useApp();
 
   const isProfessor = currentUser.role === 'PROFESSOR';
@@ -359,14 +360,22 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
   const validateForApproval = (): boolean => {
     setErrorMessage(null);
 
-    if (isProfessor && systemSettings.statusEdicao === 'BLOQUEADO') {
-      setErrorMessage('A criação/edição de instrumentos está BLOQUEADA pela coordenação.');
-      return false;
-    }
-
     if (selectedTurmas.length === 0) {
       setErrorMessage('Selecione ao menos 1 turma para o instrumento.');
       return false;
+    }
+
+    if (isProfessor) {
+      // Validar cada segmento selecionado
+      for (const selT of selectedTurmas) {
+        const fullTurma = turmas.find((t) => t.id === selT.turmaId);
+        const seg = getSegmentFromTurma(fullTurma);
+        if (!isSegmentLiberado(seg)) {
+          const segName = seg === 'FUNDAMENTAL_1' ? 'Fundamental I' : seg === 'FUNDAMENTAL_2' ? 'Fundamental II' : 'Ensino Médio';
+          setErrorMessage(`A criação/edição de instrumentos para o segmento "${segName}" está BLOQUEADA pela coordenação.`);
+          return false;
+        }
+      }
     }
 
     // Validação de datas válidas em todas as turmas
@@ -457,14 +466,21 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
   const handleSaveDraft = () => {
     setErrorMessage(null);
 
-    if (isProfessor && systemSettings.statusEdicao === 'BLOQUEADO') {
-      setErrorMessage('A criação/edição de instrumentos está BLOQUEADA pela coordenação.');
-      return;
-    }
-
     if (selectedTurmas.length === 0) {
       setErrorMessage('Selecione ao menos 1 turma para vincular ao rascunho.');
       return;
+    }
+
+    if (isProfessor) {
+      for (const selT of selectedTurmas) {
+        const fullTurma = turmas.find((t) => t.id === selT.turmaId);
+        const seg = getSegmentFromTurma(fullTurma);
+        if (!isSegmentLiberado(seg)) {
+          const segName = seg === 'FUNDAMENTAL_1' ? 'Fundamental I' : seg === 'FUNDAMENTAL_2' ? 'Fundamental II' : 'Ensino Médio';
+          setErrorMessage(`A criação/edição de instrumentos para o segmento "${segName}" está BLOQUEADA pela coordenação.`);
+          return;
+        }
+      }
     }
 
     if (!disciplinaId) {
@@ -613,18 +629,24 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
                     {availableSegmentsInEffective.map((seg) => {
                       const segCount = effectiveTurmas.filter((t) => t.nivel === seg.id).length;
                       const isSegActive = modalTurmaSegment === seg.id;
+                      const segType = seg.id === 'Ensino Fundamental I' ? 'FUNDAMENTAL_1' : seg.id === 'Ensino Fundamental II' ? 'FUNDAMENTAL_2' : 'ENSINO_MEDIO';
+                      const isSegUnlocked = isSegmentLiberado(segType);
+
                       return (
                         <button
                           key={seg.id}
                           type="button"
                           onClick={() => setModalTurmaSegment(seg.id)}
-                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-colors cursor-pointer ${
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-colors cursor-pointer flex items-center gap-1.5 ${
                             isSegActive
                               ? 'bg-white text-slate-900 shadow-xs'
                               : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
-                          {seg.label} ({segCount})
+                          <span>{seg.label} ({segCount})</span>
+                          {isProfessor && !isSegUnlocked && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" title="Segmento Bloqueado" />
+                          )}
                         </button>
                       );
                     })}

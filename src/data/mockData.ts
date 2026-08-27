@@ -118,6 +118,7 @@ export const initialUsers: User[] = [
     nome: 'Mariana Silveira',
     email: 'mariana.silveira@eaportal.org',
     role: 'COORDENADOR',
+    segmentosPermitidos: ['FUNDAMENTAL_1', 'FUNDAMENTAL_2'],
   },
   {
     id: 'user-prof-carlos',
@@ -181,6 +182,11 @@ export const initialAtribuicoes: Atribuicao[] = [
 export const initialSystemSettings: SystemSettings = {
   bimestreAtual: 3,
   statusEdicao: 'LIBERADO',
+  instrumentos_liberados: {
+    FUNDAMENTAL_1: true,
+    FUNDAMENTAL_2: true,
+    ENSINO_MEDIO: true,
+  },
 };
 
 // 6. INITIAL EVALUATION INSTRUMENTS
