@@ -24,7 +24,9 @@
   html,
   body {
     width: 210mm !important;
-    min-height: 297mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #ffffff !important;
@@ -36,9 +38,17 @@
     print-color-adjust: exact !important;
   }
 
-  /* Reset all higher-level containers so they never leak gray backgrounds or margins */
+  /* Reset all higher-level containers and screen height constraints so pages are never clipped */
   #root,
+  #root > div,
   body > div,
+  .h-screen,
+  .max-h-screen,
+  .min-h-screen,
+  .overflow-hidden,
+  .overflow-y-auto,
+  .overflow-x-hidden,
+  .h-full,
   main,
   aside,
   section {
@@ -51,6 +61,8 @@
     overflow: visible !important;
     height: auto !important;
     min-height: 0 !important;
+    max-height: none !important;
+    position: static !important;
     box-shadow: none !important;
     border: none !important;
     transform: none !important;
@@ -86,6 +98,8 @@
     transform: none !important;
     page-break-after: always !important;
     break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
     display: flex !important;
     flex-direction: column !important;
     justify-content: space-between !important;
@@ -108,7 +122,7 @@
     justify-content: space-between !important;
   }
 
-  /* Avoid awkward page break splits within instrument cards and sections */
+  /* Avoid awkward page break splits within indivisible modules */
   .break-inside-avoid,
   article,
   section {

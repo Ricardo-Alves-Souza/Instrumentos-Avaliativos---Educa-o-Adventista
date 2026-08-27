@@ -2,8 +2,9 @@ import React from 'react';
 import { InstrumentoAvaliativo, Disciplina } from '../../types';
 import { HeaderPDF } from './HeaderPDF';
 import { DisciplinaSection } from './DisciplinaSection';
-import { InstrumentoCard } from './InstrumentoCard';
+import { InstrumentoCardModular } from './InstrumentoCardModular';
 import { FooterPDF } from './FooterPDF';
+import { paginateTurmaDocument, PageData } from './paginationUtils';
 
 interface PrintDocumentProps {
   turmaNome: string;
@@ -24,74 +25,77 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({
   includeSkills,
   showFooter = true,
 }) => {
-  // Group instruments by disciplina and sort by official precedence order
-  const groupedByDisciplina = React.useMemo(() => {
-    const map = new Map<string, { discId: string; discNome: string; items: InstrumentoAvaliativo[] }>();
-    
-    for (const inst of instrumentos) {
-      const discNome = inst.disciplinaNome || 'Geral';
-      const discId = inst.disciplinaId || 'general';
-      if (!map.has(discNome)) {
-        map.set(discNome, { discId, discNome, items: [] });
-      }
-      map.get(discNome)!.items.push(inst);
-    }
-
-    const groups = Array.from(map.values()).map((g) => {
-      // Find discipline order
-      const discObj = disciplinas.find((d) => d.id === g.discId || d.nome.toLowerCase() === g.discNome.toLowerCase());
-      const ordem = discObj?.ordem ?? 999;
-      return {
-        disciplinaNome: g.discNome,
-        ordem,
-        items: g.items.sort((a, b) => a.numero - b.numero),
-      };
+  // Generate intelligent modular pages
+  const pages: PageData[] = React.useMemo(() => {
+    return paginateTurmaDocument({
+      turmaNome,
+      bimestre,
+      anoLetivo,
+      instrumentos,
+      disciplinas,
+      includeSkills,
     });
-
-    // Sort by official academic precedence
-    return groups.sort((a, b) => a.ordem - b.ordem);
-  }, [instrumentos, disciplinas]);
+  }, [turmaNome, bimestre, anoLetivo, instrumentos, disciplinas, includeSkills]);
 
   return (
-    <div className="print-doc-root w-full bg-white text-slate-800 flex flex-col flex-1 justify-between">
-      <div>
-        {/* Institutional Document Header */}
-        <HeaderPDF
-          turmaNome={turmaNome}
-          bimestre={bimestre}
-          anoLetivo={anoLetivo}
-        />
+    <>
+      {pages.map((page, pIdx) => (
+        <div
+          key={`${turmaNome}-page-${page.pageNumber}`}
+          className="print-page-container w-full min-h-[297mm] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-[#E5E7EB] rounded-lg p-10 sm:p-14 flex flex-col justify-between"
+          style={{ pageBreakBefore: pIdx > 0 ? 'always' : 'auto' }}
+        >
+          <div className="w-full">
+            {/* Header: Full Institutional on Page 1, Compact on subsequent pages */}
+            <HeaderPDF
+              turmaNome={page.turmaNome}
+              bimestre={page.bimestre}
+              anoLetivo={page.anoLetivo}
+              isContinuation={!page.isFirstPage}
+            />
 
-        {/* Main Content Area: Disciplinas & Instrumentos */}
-        {instrumentos.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 text-xs border-2 border-dashed border-slate-200 rounded-xl my-4">
-            Nenhum instrumento avaliativo cadastrado para esta turma no {bimestre}º Bimestre ({anoLetivo}).
-          </div>
-        ) : (
-          <main className="space-y-6">
-            {groupedByDisciplina.map((group) => (
-              <section key={group.disciplinaNome} className="w-full break-inside-avoid">
-                {/* Disciplina Category Heading */}
-                <DisciplinaSection disciplinaNome={group.disciplinaNome} />
+            {/* Empty State */}
+            {page.sections.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 text-xs border-2 border-dashed border-slate-200 rounded-xl my-4">
+                Nenhum instrumento avaliativo cadastrado para esta turma no {bimestre}º Bimestre ({anoLetivo}).
+              </div>
+            ) : (
+              <main className="space-y-4">
+                {page.sections.map((section, sIdx) => {
+                  if (section.type === 'disciplina') {
+                    return (
+                      <DisciplinaSection
+                        key={`disc-${section.disciplinaNome}-${sIdx}`}
+                        disciplinaNome={section.disciplinaNome}
+                      />
+                    );
+                  }
 
-                {/* List of Evaluation Instruments */}
-                <div className="space-y-4">
-                  {group.items.map((instrumento) => (
-                    <InstrumentoCard
-                      key={instrumento.id}
-                      instrumento={instrumento}
+                  return (
+                    <InstrumentoCardModular
+                      key={`inst-${section.piece.instrumento.id}-${sIdx}`}
+                      instrumento={section.piece.instrumento}
+                      modules={section.piece.modules}
+                      isContinuation={section.piece.isContinuation}
+                      isCompleted={section.piece.isCompleted}
                       includeSkills={includeSkills}
+                      sequentialNumber={section.piece.sequentialNumber}
                     />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </main>
-        )}
-      </div>
+                  );
+                })}
+              </main>
+            )}
+          </div>
 
-      {/* Institutional Footer */}
-      {showFooter && <FooterPDF />}
-    </div>
+          {/* Institutional Footer with Page Indicator */}
+          {showFooter && (
+            <FooterPDF
+              pageNumber={page.pageNumber}
+              totalPages={page.totalPages}
+            />
+          )}
+        </div>
+      ))}
+    </>
   );
 };

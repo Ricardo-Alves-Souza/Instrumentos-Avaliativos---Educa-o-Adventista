@@ -116,19 +116,21 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
     };
   };
 
-  // Get active documents to render
+  // Get active documents to render — STRICTLY FILTERING ONLY "APROVADO" INSTRUMENTS
   const renderDocuments = () => {
     if (generationMode === 'single') {
       const currentTurma = turmas.find((t) => t.id === selectedTurmaId) || turmas[0];
       const filtered = instrumentos
         .filter((inst) => {
+          // Rule 5: SOMENTE INSTRUMENTOS COM STATUS "APROVADO"
+          const isAprovado = inst.status === 'APROVADO';
           const matchTurma =
             inst.turmaId === selectedTurmaId ||
             inst.turmas?.some((t) => t.turmaId === selectedTurmaId);
           const matchBimestre = inst.bimestre === selectedBimestre;
           const matchDisc =
             selectedDisciplinaId === 'all' || inst.disciplinaId === selectedDisciplinaId;
-          return matchTurma && matchBimestre && matchDisc;
+          return isAprovado && matchTurma && matchBimestre && matchDisc;
         })
         .map((inst) => mapInstrumentForTurma(inst, selectedTurmaId));
 
@@ -144,11 +146,13 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
         return serieTurmas.map((turma) => {
           const filtered = instrumentos
             .filter((inst) => {
+              // Rule 5: SOMENTE INSTRUMENTOS COM STATUS "APROVADO"
+              const isAprovado = inst.status === 'APROVADO';
               const matchTurma =
                 inst.turmaId === turma.id ||
                 inst.turmas?.some((t) => t.turmaId === turma.id);
               const matchBimestre = inst.bimestre === selectedBimestre;
-              return matchTurma && matchBimestre;
+              return isAprovado && matchTurma && matchBimestre;
             })
             .map((inst) => mapInstrumentForTurma(inst, turma.id));
           return {
@@ -162,11 +166,13 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
           serieTurmas[0];
         const filtered = instrumentos
           .filter((inst) => {
+            // Rule 5: SOMENTE INSTRUMENTOS COM STATUS "APROVADO"
+            const isAprovado = inst.status === 'APROVADO';
             const matchTurma =
               inst.turmaId === activeBatchTurma?.id ||
               inst.turmas?.some((t) => t.turmaId === activeBatchTurma?.id);
             const matchBimestre = inst.bimestre === selectedBimestre;
-            return matchTurma && matchBimestre;
+            return isAprovado && matchTurma && matchBimestre;
           })
           .map((inst) => mapInstrumentForTurma(inst, activeBatchTurma?.id));
         return [
@@ -455,7 +461,7 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-[#111827]">Pré-visualização A4</span>
             <span className="text-[11px] text-[#6B7280]">
-              ({activeDocs.length} {activeDocs.length === 1 ? 'turma' : 'turmas'} · {totalInstrumentsCount} instrumentos)
+              ({activeDocs.length} {activeDocs.length === 1 ? 'turma' : 'turmas'} · {totalInstrumentsCount} {totalInstrumentsCount === 1 ? 'instrumento aprovado' : 'instrumentos aprovados'})
             </span>
           </div>
 
@@ -495,21 +501,16 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
           className="print-sheets-list space-y-8 w-full max-w-[210mm] transition-transform origin-top pb-16"
           style={{ transform: `scale(${zoomScale / 100})` }}
         >
-          {activeDocs.map((doc, idx) => (
-            <div
+          {activeDocs.map((doc) => (
+            <PrintDocument
               key={doc.turma.id}
-              className="print-page-container w-full min-h-[297mm] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-[#E5E7EB] rounded-lg p-10 sm:p-14 flex flex-col justify-between"
-              style={{ pageBreakBefore: idx > 0 ? 'always' : 'auto' }}
-            >
-              <PrintDocument
-                turmaNome={doc.turma.nome}
-                bimestre={selectedBimestre}
-                anoLetivo={currentYear}
-                instrumentos={doc.instrumentos}
-                disciplinas={disciplinas}
-                includeSkills={includeSkills}
-              />
-            </div>
+              turmaNome={doc.turma.nome}
+              bimestre={selectedBimestre}
+              anoLetivo={currentYear}
+              instrumentos={doc.instrumentos}
+              disciplinas={disciplinas}
+              includeSkills={includeSkills}
+            />
           ))}
         </div>
       </main>

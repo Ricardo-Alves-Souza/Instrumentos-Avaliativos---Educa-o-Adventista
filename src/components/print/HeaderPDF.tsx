@@ -6,6 +6,7 @@ interface HeaderPDFProps {
   bimestre: number;
   anoLetivo: number;
   escolaNome?: string;
+  isContinuation?: boolean;
 }
 
 export const HeaderPDF: React.FC<HeaderPDFProps> = ({
@@ -13,11 +14,40 @@ export const HeaderPDF: React.FC<HeaderPDFProps> = ({
   bimestre,
   anoLetivo,
   escolaNome = 'COLÉGIO ADVENTISTA DE SANTO AMARO',
+  isContinuation = false,
 }) => {
   // Format turma title cleanly (e.g. "Turma 4º Ano A")
   const formattedTurmaNome = turmaNome.toLowerCase().startsWith('turma')
     ? turmaNome
     : `Turma ${turmaNome}`;
+
+  if (isContinuation) {
+    return (
+      <header className="mb-5 pb-3 border-b border-slate-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <AdventistLogo size={28} />
+            <div>
+              <h2 className="text-[13px] font-bold text-[#0c3966] leading-tight">
+                {escolaNome}
+              </h2>
+              <p className="text-[9px] font-medium tracking-wider text-slate-500 uppercase">
+                INSTRUMENTOS AVALIATIVOS
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <h3 className="text-xs font-bold text-[#0c3966]">
+              {formattedTurmaNome} <span className="font-normal text-slate-500">(Continuação)</span>
+            </h3>
+            <p className="text-[10px] text-slate-500">
+              {bimestre}º Bimestre · Ano letivo {anoLetivo}
+            </p>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="mb-6">
