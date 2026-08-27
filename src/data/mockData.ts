@@ -5,6 +5,7 @@ import {
   User,
   Atribuicao,
   SystemSettings,
+  TipoInstrumentoItem,
 } from '../types';
 
 const currentYear = new Date().getFullYear();
@@ -589,4 +590,11 @@ Os grupos apresentarão seus cartazes em seminário oral de 5 minutos, explicand
       { status: 'RASCUNHO', data: '25/08/2026 14:00', usuarioNome: 'Profª. Ana Paula Oliveira', usuarioRole: 'PROFESSOR' },
     ],
   },
+];
+
+export const initialTiposInstrumento: TipoInstrumentoItem[] = [
+  { id: 'tipo-av1', nome: 'AV1', ordem: 1 },
+  { id: 'tipo-av2', nome: 'AV2', ordem: 2 },
+  { id: 'tipo-rec', nome: 'Recuperação', ordem: 3 },
+  { id: 'tipo-sim', nome: 'Simulado', ordem: 4 },
 ];

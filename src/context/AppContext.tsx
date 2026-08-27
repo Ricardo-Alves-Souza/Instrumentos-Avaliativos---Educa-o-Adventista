@@ -7,6 +7,7 @@ import {
   User,
   Atribuicao,
   SystemSettings,
+  TipoInstrumentoItem,
 } from '../types';
 import {
   initialTurmas,
@@ -15,6 +16,7 @@ import {
   initialAtribuicoes,
   initialSystemSettings,
   initialInstrumentos,
+  initialTiposInstrumento,
 } from '../data/mockData';
 import { getSupabase, isSupabaseConfigured, initSupabase } from '../lib/supabase';
 import {
@@ -41,6 +43,7 @@ const STORAGE_KEYS = {
   ATRIBUICOES: 'ia_atribuicoes_v4',
   SETTINGS: 'ia_settings_v4',
   INSTRUMENTOS: 'ia_instrumentos_v4',
+  TIPOS_INSTRUMENTO: 'ia_tipos_instrumento_v4',
   CURRENT_USER_ID: 'ia_current_user_id_v4',
   AUTH_SAVED_SESSION: 'ia_auth_saved_user_v4',
 };
@@ -87,6 +90,12 @@ interface AppContextType {
   updateDisciplina: (disc: Disciplina) => Promise<void>;
   deleteDisciplina: (id: string) => Promise<void>;
   moveDisciplinaOrder: (id: string, direction: 'up' | 'down') => Promise<void>;
+
+  // Tipos de Instrumento
+  tiposInstrumento: TipoInstrumentoItem[];
+  addTipoInstrumento: (nome: string) => Promise<TipoInstrumentoItem>;
+  updateTipoInstrumento: (item: TipoInstrumentoItem) => Promise<void>;
+  deleteTipoInstrumento: (id: string) => Promise<void>;
 
   // Atribuições
   atribuicoes: Atribuicao[];
@@ -175,6 +184,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadFromStorage(STORAGE_KEYS.INSTRUMENTOS, initialInstrumentos)
   );
 
+  const [tiposInstrumento, setTiposInstrumento] = useState<TipoInstrumentoItem[]>(() => {
+    const loaded = loadFromStorage<TipoInstrumentoItem[]>(STORAGE_KEYS.TIPOS_INSTRUMENTO, initialTiposInstrumento);
+    if (!loaded || loaded.length === 0) return initialTiposInstrumento;
+    // Garantir que os 4 padrões existam se não tiverem sido todos excluídos propositalmente
+    return loaded;
+  });
+
   const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
 
   // Authentication State
@@ -213,6 +229,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     saveToStorage(STORAGE_KEYS.INSTRUMENTOS, instrumentos);
   }, [instrumentos]);
+
+  useEffect(() => {
+    saveToStorage(STORAGE_KEYS.TIPOS_INSTRUMENTO, tiposInstrumento);
+  }, [tiposInstrumento]);
 
   // Initial Load from Supabase on mount
   useEffect(() => {
@@ -729,6 +749,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Tipos de Instrumento CRUD
+  const addTipoInstrumento = async (nome: string): Promise<TipoInstrumentoItem> => {
+    const trimmed = nome.trim();
+    if (!trimmed) {
+      throw new Error('O nome do tipo de instrumento é obrigatório.');
+    }
+    const maxOrder = tiposInstrumento.reduce((max, t) => Math.max(max, t.ordem || 0), 0);
+    const newItem: TipoInstrumentoItem = {
+      id: `tipo-${Date.now()}`,
+      nome: trimmed,
+      ordem: maxOrder + 1,
+    };
+    setTiposInstrumento((prev) => [...prev, newItem]);
+    return newItem;
+  };
+
+  const updateTipoInstrumento = async (updated: TipoInstrumentoItem) => {
+    const trimmed = updated.nome.trim();
+    if (!trimmed) {
+      throw new Error('O nome do tipo de instrumento é obrigatório.');
+    }
+    setTiposInstrumento((prev) =>
+      prev.map((t) => (t.id === updated.id ? { ...updated, nome: trimmed } : t))
+    );
+  };
+
+  const deleteTipoInstrumento = async (id: string) => {
+    setTiposInstrumento((prev) => prev.filter((t) => t.id !== id));
+  };
+
   // Atribuições CRUD
   const saveAtribuicao = async (
     professorId: string,
@@ -1058,6 +1108,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const resetAllData = () => {
     setTurmas(initialTurmas);
     setDisciplinas(initialDisciplinas);
+    setTiposInstrumento(initialTiposInstrumento);
     setUsers(initialUsers);
     setAtribuicoes(initialAtribuicoes);
     setSystemSettings(initialSystemSettings);
@@ -1098,6 +1149,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateDisciplina,
         deleteDisciplina,
         moveDisciplinaOrder,
+        tiposInstrumento,
+        addTipoInstrumento,
+        updateTipoInstrumento,
+        deleteTipoInstrumento,
         atribuicoes,
         saveAtribuicao,
         deleteAtribuicao,

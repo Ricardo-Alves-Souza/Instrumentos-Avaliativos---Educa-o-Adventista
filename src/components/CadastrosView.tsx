@@ -13,9 +13,10 @@ import {
   Layers,
   Filter,
   AlertCircle,
+  FileCheck,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Disciplina, Turma } from '../types';
+import { Disciplina, Turma, TipoInstrumentoItem } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 
 export const CadastrosView: React.FC = () => {
@@ -29,14 +30,19 @@ export const CadastrosView: React.FC = () => {
     updateDisciplina,
     deleteDisciplina,
     moveDisciplinaOrder,
+    tiposInstrumento,
+    addTipoInstrumento,
+    updateTipoInstrumento,
+    deleteTipoInstrumento,
     currentUser,
   } = useApp();
 
-  const [activeSubTab, setActiveSubTab] = useState<'disciplinas' | 'turmas'>('disciplinas');
+  const [activeSubTab, setActiveSubTab] = useState<'disciplinas' | 'turmas' | 'tiposInstrumento'>('disciplinas');
 
   // Search and Filters
   const [searchDisc, setSearchDisc] = useState('');
   const [searchTurma, setSearchTurma] = useState('');
+  const [searchTipoInst, setSearchTipoInst] = useState('');
   const [filterNivel, setFilterNivel] = useState<string>('all');
   const [filterTurno, setFilterTurno] = useState<string>('all');
 
@@ -59,11 +65,20 @@ export const CadastrosView: React.FC = () => {
   const [isSavingTurma, setIsSavingTurma] = useState(false);
   const [turmaError, setTurmaError] = useState<string | null>(null);
 
+  // Tipo Instrumento Modal State
+  const [isTipoModalOpen, setIsTipoModalOpen] = useState(false);
+  const [editingTipo, setEditingTipo] = useState<TipoInstrumentoItem | null>(null);
+  const [tipoNome, setTipoNome] = useState('');
+  const [isSavingTipo, setIsSavingTipo] = useState(false);
+  const [tipoError, setTipoError] = useState<string | null>(null);
+
   // Confirm Delete Modals
   const [deletingDisc, setDeletingDisc] = useState<Disciplina | null>(null);
   const [isDeletingDisc, setIsDeletingDisc] = useState(false);
   const [deletingTurma, setDeletingTurma] = useState<Turma | null>(null);
   const [isDeletingTurma, setIsDeletingTurma] = useState(false);
+  const [deletingTipo, setDeletingTipo] = useState<TipoInstrumentoItem | null>(null);
+  const [isDeletingTipo, setIsDeletingTipo] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
 
   const isAuthorized = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR';
@@ -164,6 +179,42 @@ export const CadastrosView: React.FC = () => {
     }
   };
 
+  // Open Tipo Instrumento Modal for Create or Edit
+  const handleOpenTipoModal = (tipo?: TipoInstrumentoItem) => {
+    setTipoError(null);
+    if (tipo) {
+      setEditingTipo(tipo);
+      setTipoNome(tipo.nome);
+    } else {
+      setEditingTipo(null);
+      setTipoNome('');
+    }
+    setIsTipoModalOpen(true);
+  };
+
+  const handleSaveTipo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tipoNome.trim()) return;
+
+    try {
+      setIsSavingTipo(true);
+      setTipoError(null);
+      if (editingTipo) {
+        await updateTipoInstrumento({
+          ...editingTipo,
+          nome: tipoNome.trim(),
+        });
+      } else {
+        await addTipoInstrumento(tipoNome.trim());
+      }
+      setIsTipoModalOpen(false);
+    } catch (err: any) {
+      setTipoError(err?.message || 'Erro ao salvar tipo de instrumento.');
+    } finally {
+      setIsSavingTipo(false);
+    }
+  };
+
   const handleConfirmDeleteDisc = async () => {
     if (!deletingDisc) return;
     try {
@@ -172,7 +223,7 @@ export const CadastrosView: React.FC = () => {
       await deleteDisciplina(deletingDisc.id);
       setDeletingDisc(null);
     } catch (err: any) {
-      setGeneralError(err?.message || 'Erro ao excluir disciplina no Supabase.');
+      setGeneralError(err?.message || 'Erro ao excluir disciplina.');
     } finally {
       setIsDeletingDisc(false);
     }
@@ -186,9 +237,23 @@ export const CadastrosView: React.FC = () => {
       await deleteTurma(deletingTurma.id);
       setDeletingTurma(null);
     } catch (err: any) {
-      setGeneralError(err?.message || 'Erro ao excluir turma no Supabase.');
+      setGeneralError(err?.message || 'Erro ao excluir turma.');
     } finally {
       setIsDeletingTurma(false);
+    }
+  };
+
+  const handleConfirmDeleteTipo = async () => {
+    if (!deletingTipo) return;
+    try {
+      setIsDeletingTipo(true);
+      setGeneralError(null);
+      await deleteTipoInstrumento(deletingTipo.id);
+      setDeletingTipo(null);
+    } catch (err: any) {
+      setGeneralError(err?.message || 'Erro ao excluir tipo de instrumento.');
+    } finally {
+      setIsDeletingTipo(false);
     }
   };
 
@@ -207,6 +272,10 @@ export const CadastrosView: React.FC = () => {
     const matchTurno = filterTurno === 'all' || t.turno === filterTurno;
     return matchSearch && matchNivel && matchTurno;
   });
+
+  const filteredTipos = tiposInstrumento.filter((t) =>
+    t.nome.toLowerCase().includes(searchTipoInst.toLowerCase())
+  );
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -246,6 +315,18 @@ export const CadastrosView: React.FC = () => {
           >
             <GraduationCap className="w-3.5 h-3.5 text-[#3B82F6]" />
             <span>Turmas ({turmas.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('tiposInstrumento')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              activeSubTab === 'tiposInstrumento'
+                ? 'bg-white text-[#111827] shadow-xs'
+                : 'text-[#6B7280] hover:text-[#111827]'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-[#3B82F6]" />
+            <span>Tipos de Instrumento ({tiposInstrumento.length})</span>
           </button>
         </div>
       </div>
@@ -454,6 +535,99 @@ export const CadastrosView: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TIPOS DE INSTRUMENTO SUB-TAB */}
+      {activeSubTab === 'tiposInstrumento' && (
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-xl border border-[#E5E7EB] shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Buscar tipo de instrumento por nome..."
+                value={searchTipoInst}
+                onChange={(e) => setSearchTipoInst(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-xs border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
+              />
+            </div>
+
+            {isAuthorized && (
+              <button
+                type="button"
+                onClick={() => handleOpenTipoModal()}
+                className="inline-flex items-center gap-2 bg-[#111827] hover:bg-[#1f2937] text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Tipo de Instrumento</span>
+              </button>
+            )}
+          </div>
+
+          <div className="bg-white border border-[#E5E7EB] rounded-xl shadow-xs overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#F3F4F6] bg-[#F9FAFB]/50 flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-[#111827]">
+                  Opções Disponíveis no Formulário de Cadastro
+                </h3>
+                <p className="text-[11px] text-[#6B7280] mt-0.5">
+                  Estes são os tipos de instrumentos avaliativos exibidos no seletor "Instrumento" para os professores.
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-[#3B82F6] bg-[#EFF6FF] px-2.5 py-1 rounded-full border border-[#DBEAFE]">
+                {filteredTipos.length} tipos cadastrados
+              </span>
+            </div>
+
+            <div className="divide-y divide-[#F3F4F6]">
+              {filteredTipos.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#6B7280]">
+                  Nenhum tipo de instrumento encontrado.
+                </div>
+              ) : (
+                filteredTipos.map((tipo, idx) => (
+                  <div
+                    key={tipo.id}
+                    className="p-4 flex items-center justify-between hover:bg-[#F9FAFB] transition-colors gap-4"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-[#F3F4F6] text-[#6B7280] flex items-center justify-center text-[11px] font-bold">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <h4 className="text-xs font-bold text-[#111827]">{tipo.nome}</h4>
+                        <span className="text-[10px] text-[#9CA3AF]">
+                          Disponível para seleção em novos instrumentos
+                        </span>
+                      </div>
+                    </div>
+
+                    {isAuthorized && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenTipoModal(tipo)}
+                          className="p-1.5 text-[#6B7280] hover:text-[#3B82F6] hover:bg-[#EFF6FF] rounded cursor-pointer transition-colors"
+                          title="Editar Tipo"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingTipo(tipo)}
+                          className="p-1.5 text-[#6B7280] hover:text-red-600 hover:bg-red-50 rounded cursor-pointer transition-colors"
+                          title="Excluir Tipo"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -671,6 +845,70 @@ export const CadastrosView: React.FC = () => {
         </div>
       )}
 
+      {/* MODAL TIPO DE INSTRUMENTO */}
+      {isTipoModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#111827]/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-xl border border-[#E5E7EB] overflow-hidden">
+            <div className="px-6 py-4 border-b border-[#F3F4F6] flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[#111827]">
+                {editingTipo ? 'Editar Tipo de Instrumento' : 'Novo Tipo de Instrumento'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsTipoModalOpen(false)}
+                className="text-[#9CA3AF] hover:text-[#111827] p-1 rounded-md cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTipo} className="p-6 space-y-4">
+              {tipoError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>{tipoError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#374151] mb-1">
+                  Nome do Instrumento *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={tipoNome}
+                  onChange={(e) => setTipoNome(e.target.value)}
+                  placeholder="Ex: AV1, AV2, Recuperação, Simulado, Trabalho"
+                  className="w-full text-xs border border-[#E5E7EB] rounded-lg p-2.5 bg-[#F9FAFB] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]/20 font-medium"
+                />
+                <p className="text-[11px] text-[#6B7280] mt-1.5">
+                  Este nome aparecerá diretamente no campo de seleção "Instrumento" ao cadastrar novos instrumentos.
+                </p>
+              </div>
+
+              <div className="pt-3 border-t border-[#F3F4F6] flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingTipo}
+                  onClick={() => setIsTipoModalOpen(false)}
+                  className="px-4 py-2 text-xs text-[#6B7280] hover:bg-[#F3F4F6] rounded-lg font-medium cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingTipo}
+                  className="px-5 py-2 text-xs bg-[#111827] hover:bg-[#1f2937] text-white font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingTipo ? 'Salvando...' : 'Salvar Tipo'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* CONFIRM DELETE MODALS */}
       <ConfirmModal
         isOpen={!!deletingDisc}
@@ -692,6 +930,17 @@ export const CadastrosView: React.FC = () => {
         isLoading={isDeletingTurma}
         onClose={() => setDeletingTurma(null)}
         onConfirm={handleConfirmDeleteTurma}
+      />
+
+      <ConfirmModal
+        isOpen={!!deletingTipo}
+        title="Excluir Tipo de Instrumento"
+        message={`Tem certeza que deseja excluir o tipo de instrumento "${deletingTipo?.nome}"? Novos cadastros não exibirão mais esta opção.`}
+        confirmText="Excluir Tipo"
+        confirmVariant="danger"
+        isLoading={isDeletingTipo}
+        onClose={() => setDeletingTipo(null)}
+        onConfirm={handleConfirmDeleteTipo}
       />
     </div>
   );

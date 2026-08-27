@@ -109,3 +109,9 @@ export interface SystemSettings {
 export interface ExportOptions {
   includeSkills: boolean;
 }
+
+export interface TipoInstrumentoItem {
+  id: string;
+  nome: string; // e.g. "AV1", "AV2", "Recuperação", "Simulado", "Trabalho"
+  ordem?: number;
+}

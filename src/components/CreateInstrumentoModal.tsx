@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Plus,
@@ -11,15 +11,19 @@ import {
   CheckSquare,
   Square,
   Copy,
+  Calculator,
+  HelpCircle,
+  CheckCircle2,
+  FileCheck,
 } from 'lucide-react';
 import {
   InstrumentoAvaliativo,
   InstrumentoTurmaEntrega,
   CriterioAvaliativo,
   Habilidade,
-  InstrumentoStatus,
 } from '../types';
 import { useApp } from '../context/AppContext';
+import { AutoResizeTextarea } from './AutoResizeTextarea';
 
 interface CreateInstrumentoModalProps {
   isOpen: boolean;
@@ -32,6 +36,55 @@ interface CreateInstrumentoModalProps {
   defaultDisciplinaId?: string;
 }
 
+interface LocalCriterio {
+  id: string;
+  descricao: string;
+  valorInput: string;
+}
+
+// Funções auxiliares para conversão de data ISO (YYYY-MM-DD) <-> BR (DD/MM/YYYY)
+function toDateInputValue(brDate: string): string {
+  if (!brDate) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(brDate)) return brDate;
+  const parts = brDate.split('/');
+  if (parts.length === 3) {
+    const [d, m, y] = parts;
+    if (d && m && y && y.length === 4) {
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+  }
+  return '';
+}
+
+function fromDateInputValue(isoDate: string): string {
+  if (!isoDate) return '';
+  const parts = isoDate.split('-');
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+  }
+  return isoDate;
+}
+
+function isValidDateStr(str: string): boolean {
+  if (!str) return false;
+  const parts = str.split('/');
+  if (parts.length !== 3) return false;
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  const year = parseInt(parts[2], 10);
+  if (isNaN(day) || isNaN(month) || isNaN(year)) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  if (year < 2000 || year > 2100) return false;
+  const dateObj = new Date(year, month - 1, day);
+  return (
+    dateObj.getFullYear() === year &&
+    dateObj.getMonth() === month - 1 &&
+    dateObj.getDate() === day
+  );
+}
+
 export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
   isOpen,
   onClose,
@@ -42,6 +95,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
   const {
     turmas,
     disciplinas,
+    tiposInstrumento,
     systemSettings,
     currentUser,
     getProfessorTurmas,
@@ -54,156 +108,103 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
 
   const isProfessor = currentUser.role === 'PROFESSOR';
 
-  // Available classes & disciplines according to permissions and assignments
+  // Turmas e Disciplinas disponíveis
   const availableTurmas = isProfessor ? getProfessorTurmas(currentUser.id) : turmas;
   const availableDisciplinas = isProfessor ? getProfessorDisciplinas(currentUser.id) : disciplinas;
 
   const effectiveTurmas = availableTurmas.length > 0 ? availableTurmas : turmas;
   const effectiveDisciplinas = availableDisciplinas.length > 0 ? availableDisciplinas : disciplinas;
 
-  // Selected turmas with individual delivery dates
-  const [selectedTurmas, setSelectedTurmas] = useState<InstrumentoTurmaEntrega[]>(() => {
-    if (initialInstrumento) {
-      if (initialInstrumento.turmas && initialInstrumento.turmas.length > 0) {
-        return initialInstrumento.turmas;
-      }
-      return [
-        {
-          turmaId: initialInstrumento.turmaId,
-          turmaNome: initialInstrumento.turmaNome,
-          data: initialInstrumento.data || '',
-        },
-      ];
-    }
-    if (defaultTurmaId) {
-      const found = effectiveTurmas.find((t) => t.id === defaultTurmaId);
-      if (found) {
-        return [{ turmaId: found.id, turmaNome: found.nome, data: '' }];
-      }
-    }
-    // Start completely unselected / empty by default per user requirement!
-    return [];
-  });
+  // Estados do formulário
+  const [selectedTurmas, setSelectedTurmas] = useState<InstrumentoTurmaEntrega[]>([]);
+  const [disciplinaId, setDisciplinaId] = useState<string>('');
+  const [numero, setNumero] = useState<number | ''>('');
+  const [codigoIdentificador, setCodigoIdentificador] = useState<string>('');
+  const [tipoNome, setTipoNome] = useState<string>('');
+  const [peso, setPeso] = useState<number | ''>('');
+  const [bimestre, setBimestre] = useState<number>(systemSettings.bimestreAtual);
+  const [anoLetivo, setAnoLetivo] = useState<number>(new Date().getFullYear());
+  const [conteudo, setConteudo] = useState<string>('');
+  const [fonteEstudo, setFonteEstudo] = useState<string>('');
+  const [desenvolvimento, setDesenvolvimento] = useState<string>('');
+  const [criterios, setCriterios] = useState<LocalCriterio[]>([]);
+  const [habilidades, setHabilidades] = useState<Habilidade[]>([]);
 
-  const [disciplinaId, setDisciplinaId] = useState<string>(() => {
-    if (initialInstrumento) return initialInstrumento.disciplinaId;
-    if (defaultDisciplinaId) return defaultDisciplinaId;
-    return '';
-  });
-
-  const [numero, setNumero] = useState<number | ''>(() => {
-    if (initialInstrumento) return initialInstrumento.numero;
-    return '';
-  });
-
-  const [codigoIdentificador, setCodigoIdentificador] = useState<string>(() => {
-    if (initialInstrumento) return initialInstrumento.codigoIdentificador;
-    return '';
-  });
-
-  const [tipoNome, setTipoNome] = useState<string>(() => {
-    if (initialInstrumento) return initialInstrumento.tipoNome;
-    return '';
-  });
-
-  const [peso, setPeso] = useState<number | ''>(() => {
-    if (initialInstrumento) return initialInstrumento.peso;
-    return '';
-  });
-
-  const [bimestre, setBimestre] = useState<number>(() => {
-    if (initialInstrumento) return initialInstrumento.bimestre;
-    return systemSettings.bimestreAtual;
-  });
-
-  const [anoLetivo, setAnoLetivo] = useState<number>(() => {
-    if (initialInstrumento) return initialInstrumento.anoLetivo;
-    return new Date().getFullYear();
-  });
-
-  const [conteudo, setConteudo] = useState<string>(() => {
-    if (initialInstrumento) return initialInstrumento.conteudo;
-    return '';
-  });
-
-  const [fonteEstudo, setFonteEstudo] = useState<string>(() => {
-    if (initialInstrumento) return initialInstrumento.fonteEstudo;
-    return '';
-  });
-
-  const [desenvolvimento, setDesenvolvimento] = useState<string>(() => {
-    if (initialInstrumento) return initialInstrumento.desenvolvimento;
-    return '';
-  });
-
-  // Criteria start EMPTY by default when creating new instrument
-  const [criterios, setCriterios] = useState<CriterioAvaliativo[]>(() => {
-    if (initialInstrumento) return initialInstrumento.criterios;
-    return [];
-  });
-
-  // Skills start EMPTY by default when creating new instrument
-  const [habilidades, setHabilidades] = useState<Habilidade[]>(() => {
-    if (initialInstrumento?.habilidades) return initialInstrumento.habilidades;
-    return [];
-  });
-
+  // Estados de feedback e modais de fluxo
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Sync when initialInstrumento or isOpen changes
+  // Modal de confirmação ao enviar para aprovação
+  const [isApprovalConfirmOpen, setIsApprovalConfirmOpen] = useState(false);
+
+  // Modal pós-salvamento: "Deseja cadastrar outro instrumento?"
+  const [isPostSavePromptOpen, setIsPostSavePromptOpen] = useState(false);
+  const [postSaveType, setPostSaveType] = useState<'ENVIADO' | 'RASCUNHO' | 'SALVO'>('ENVIADO');
+
+  // Inicialização / Reset
+  const resetFormState = (preserveDefaults = true) => {
+    if (initialInstrumento && preserveDefaults) {
+      if (initialInstrumento.turmas && initialInstrumento.turmas.length > 0) {
+        setSelectedTurmas(initialInstrumento.turmas);
+      } else {
+        setSelectedTurmas([
+          {
+            turmaId: initialInstrumento.turmaId,
+            turmaNome: initialInstrumento.turmaNome,
+            data: initialInstrumento.data || '',
+          },
+        ]);
+      }
+      setDisciplinaId(initialInstrumento.disciplinaId);
+      setNumero(initialInstrumento.numero);
+      setCodigoIdentificador(initialInstrumento.codigoIdentificador || 'AV1');
+      setTipoNome(initialInstrumento.tipoNome);
+      setPeso(initialInstrumento.peso);
+      setBimestre(initialInstrumento.bimestre);
+      setAnoLetivo(initialInstrumento.anoLetivo);
+      setConteudo(initialInstrumento.conteudo);
+      setFonteEstudo(initialInstrumento.fonteEstudo);
+      setDesenvolvimento(initialInstrumento.desenvolvimento);
+      setCriterios(
+        (initialInstrumento.criterios || []).map((c) => ({
+          id: c.id || 'c-' + Math.random(),
+          descricao: c.descricao,
+          valorInput: String(c.valor).replace('.', ','),
+        }))
+      );
+      setHabilidades(initialInstrumento.habilidades || []);
+    } else {
+      // Novo instrumento do zero
+      const initialTurmaList = defaultTurmaId
+        ? [{ turmaId: defaultTurmaId, turmaNome: effectiveTurmas.find((t) => t.id === defaultTurmaId)?.nome || '', data: '' }]
+        : [];
+      setSelectedTurmas(initialTurmaList);
+      setDisciplinaId(defaultDisciplinaId || (effectiveDisciplinas.length === 1 ? effectiveDisciplinas[0].id : ''));
+      setNumero('');
+      setCodigoIdentificador(tiposInstrumento.length > 0 ? tiposInstrumento[0].nome : 'AV1');
+      setTipoNome('');
+      setPeso('');
+      setBimestre(systemSettings.bimestreAtual);
+      setAnoLetivo(new Date().getFullYear());
+      setConteudo('');
+      setFonteEstudo('');
+      setDesenvolvimento('');
+      setCriterios([]);
+      setHabilidades([]);
+    }
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsApprovalConfirmOpen(false);
+    setIsPostSavePromptOpen(false);
+  };
+
   useEffect(() => {
     if (isOpen) {
-      if (initialInstrumento) {
-        if (initialInstrumento.turmas && initialInstrumento.turmas.length > 0) {
-          setSelectedTurmas(initialInstrumento.turmas);
-        } else {
-          setSelectedTurmas([
-            {
-              turmaId: initialInstrumento.turmaId,
-              turmaNome: initialInstrumento.turmaNome,
-              data: initialInstrumento.data || '',
-            },
-          ]);
-        }
-        setDisciplinaId(initialInstrumento.disciplinaId);
-        setNumero(initialInstrumento.numero);
-        setCodigoIdentificador(initialInstrumento.codigoIdentificador);
-        setTipoNome(initialInstrumento.tipoNome);
-        setPeso(initialInstrumento.peso);
-        setBimestre(initialInstrumento.bimestre);
-        setAnoLetivo(initialInstrumento.anoLetivo);
-        setConteudo(initialInstrumento.conteudo);
-        setFonteEstudo(initialInstrumento.fonteEstudo);
-        setDesenvolvimento(initialInstrumento.desenvolvimento);
-        setCriterios(initialInstrumento.criterios || []);
-        setHabilidades(initialInstrumento.habilidades || []);
-      } else {
-        // Reset when opening fresh for new instrument
-        setSelectedTurmas(
-          defaultTurmaId
-            ? [{ turmaId: defaultTurmaId, turmaNome: effectiveTurmas.find((t) => t.id === defaultTurmaId)?.nome || '', data: '' }]
-            : []
-        );
-        setDisciplinaId(defaultDisciplinaId || '');
-        setNumero('');
-        setCodigoIdentificador('');
-        setTipoNome('');
-        setPeso('');
-        setBimestre(systemSettings.bimestreAtual);
-        setAnoLetivo(new Date().getFullYear());
-        setConteudo('');
-        setFonteEstudo('');
-        setDesenvolvimento('');
-        setCriterios([]);
-        setHabilidades([]);
-      }
-      setErrorMessage(null);
-      setSuccessMessage(null);
+      resetFormState(true);
     }
   }, [isOpen, initialInstrumento, defaultTurmaId, defaultDisciplinaId, systemSettings.bimestreAtual]);
 
-  // Toggle turma selection
+  // Seletor de Turmas
   const handleToggleTurma = (tId: string) => {
     const isSelected = selectedTurmas.some((t) => t.turmaId === tId);
     if (isSelected) {
@@ -211,7 +212,6 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     } else {
       const found = effectiveTurmas.find((t) => t.id === tId);
       if (found) {
-        // Inherit date from first selected class if available
         const defaultDate = selectedTurmas[0]?.data || '';
         setSelectedTurmas([
           ...selectedTurmas,
@@ -221,14 +221,15 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     }
   };
 
-  // Change delivery date for a specific turma
-  const handleUpdateTurmaDate = (tId: string, newDate: string) => {
+  // Atualização de Data por Turma
+  const handleUpdateTurmaDate = (tId: string, rawIsoDate: string) => {
+    const brDate = fromDateInputValue(rawIsoDate);
     setSelectedTurmas(
-      selectedTurmas.map((t) => (t.turmaId === tId ? { ...t, data: newDate } : t))
+      selectedTurmas.map((t) => (t.turmaId === tId ? { ...t, data: brDate } : t))
     );
   };
 
-  // Batch copy first class delivery date to all selected classes
+  // Copiar primeira data para todas
   const handleCopyDateToAll = () => {
     if (selectedTurmas.length === 0) return;
     const firstDate = selectedTurmas[0].data;
@@ -236,11 +237,11 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     setSelectedTurmas(selectedTurmas.map((t) => ({ ...t, data: firstDate })));
   };
 
-  // Criteria handlers
+  // Critérios Avaliativos
   const handleAddCriterio = () => {
     setCriterios([
       ...criterios,
-      { id: 'c-' + Date.now(), descricao: '', valor: 1.0 },
+      { id: 'c-' + Date.now(), descricao: '', valorInput: '1,0' },
     ]);
   };
 
@@ -248,7 +249,20 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     setCriterios(criterios.filter((c) => c.id !== id));
   };
 
-  // Skills handlers
+  // Somatória em tempo real dos critérios avaliativos
+  const somaCriterios = useMemo(() => {
+    return criterios.reduce((total, crit) => {
+      const parsed = parseFloat((crit.valorInput || '0').replace(',', '.'));
+      return total + (isNaN(parsed) ? 0 : parsed);
+    }, 0);
+  }, [criterios]);
+
+  const somaCriteriosFormatada = somaCriterios.toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 2,
+  });
+
+  // Habilidades
   const handleAddHabilidade = () => {
     setHabilidades([
       ...habilidades,
@@ -260,14 +274,26 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     setHabilidades(habilidades.filter((h) => h.id !== id));
   };
 
+  // Montagem do Payload
   const buildInstrumentPayload = (): Partial<InstrumentoAvaliativo> => {
     const primaryTurma = selectedTurmas[0];
     const selDisc = disciplinas.find((d) => d.id === disciplinaId);
 
+    const parsedCriterios: CriterioAvaliativo[] = criterios
+      .filter((c) => c.descricao.trim() !== '')
+      .map((c) => {
+        const val = parseFloat((c.valorInput || '0').replace(',', '.'));
+        return {
+          id: c.id,
+          descricao: c.descricao.trim(),
+          valor: isNaN(val) ? 0 : val,
+        };
+      });
+
     return {
       ...(initialInstrumento ? { id: initialInstrumento.id } : {}),
       numero: numero === '' ? 1 : Number(numero),
-      codigoIdentificador: (codigoIdentificador || 'AV1').trim().toUpperCase(),
+      codigoIdentificador: (codigoIdentificador || 'AV1').trim(),
       tipoNome: tipoNome.trim().toUpperCase(),
       data: primaryTurma?.data || '',
       peso: peso === '' ? 10.0 : Number(peso),
@@ -283,12 +309,110 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
       conteudo: conteudo.trim(),
       fonteEstudo: fonteEstudo.trim(),
       desenvolvimento: desenvolvimento.trim(),
-      criterios: criterios.filter((c) => c.descricao.trim() !== ''),
+      criterios: parsedCriterios,
       habilidades: habilidades.filter((h) => h.codigo.trim() !== ''),
     };
   };
 
-  // Handle Save as Draft
+  // Validação para Envio de Aprovação
+  const validateForApproval = (): boolean => {
+    setErrorMessage(null);
+
+    if (isProfessor && systemSettings.statusEdicao === 'BLOQUEADO') {
+      setErrorMessage('A criação/edição de instrumentos está BLOQUEADA pela coordenação.');
+      return false;
+    }
+
+    if (selectedTurmas.length === 0) {
+      setErrorMessage('Selecione ao menos 1 turma para o instrumento.');
+      return false;
+    }
+
+    // Validação de datas válidas em todas as turmas
+    const missingDateTurma = selectedTurmas.find((t) => !t.data || t.data.trim() === '');
+    if (missingDateTurma) {
+      setErrorMessage(`Informe a data de entrega para a turma: ${missingDateTurma.turmaNome}.`);
+      return false;
+    }
+
+    const invalidDateTurma = selectedTurmas.find((t) => !isValidDateStr(t.data));
+    if (invalidDateTurma) {
+      setErrorMessage(`Data de entrega inválida para a turma "${invalidDateTurma.turmaNome}". Utilize uma data válida.`);
+      return false;
+    }
+
+    if (!disciplinaId) {
+      setErrorMessage('Selecione uma disciplina.');
+      return false;
+    }
+
+    if (!codigoIdentificador.trim()) {
+      setErrorMessage('Selecione o instrumento correspondente (ex: AV1, AV2).');
+      return false;
+    }
+
+    if (!tipoNome.trim()) {
+      setErrorMessage('Informe o tipo/nome do instrumento avaliativo (ex: PROVA ESCRITA, SEMINÁRIO).');
+      return false;
+    }
+
+    if (peso === '' || Number(peso) <= 0) {
+      setErrorMessage('Informe o peso/pontuação máxima do instrumento.');
+      return false;
+    }
+
+    if (!conteudo.trim()) {
+      setErrorMessage('Informe o conteúdo curricular cobrado.');
+      return false;
+    }
+
+    if (!fonteEstudo.trim()) {
+      setErrorMessage('Informe as fontes de estudo e materiais de apoio.');
+      return false;
+    }
+
+    if (!desenvolvimento.trim()) {
+      setErrorMessage('Descreva o desenvolvimento pedagógico da atividade.');
+      return false;
+    }
+
+    if (criterios.length === 0) {
+      setErrorMessage('Adicione ao menos 1 critério avaliativo com pontuação.');
+      return false;
+    }
+
+    const emptyCriterio = criterios.find((c) => !c.descricao.trim());
+    if (emptyCriterio) {
+      setErrorMessage('Preencha a descrição de todos os critérios avaliativos cadastrados.');
+      return false;
+    }
+
+    return true;
+  };
+
+  // Clique no botão "Enviar para Aprovação" -> Abre diálogo de confirmação
+  const handleClickSubmitButton = () => {
+    if (!validateForApproval()) {
+      return;
+    }
+    setIsApprovalConfirmOpen(true);
+  };
+
+  // Executa o envio definitivo para aprovação
+  const handleConfirmSendForApproval = () => {
+    try {
+      const payload = buildInstrumentPayload();
+      enviarParaAprovacao(payload);
+      setIsApprovalConfirmOpen(false);
+      setPostSaveType('ENVIADO');
+      setIsPostSavePromptOpen(true);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Erro ao enviar para aprovação.');
+      setIsApprovalConfirmOpen(false);
+    }
+  };
+
+  // Salvar como rascunho a partir do modal ou botão direto
   const handleSaveDraft = () => {
     setErrorMessage(null);
 
@@ -310,96 +434,16 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     try {
       const payload = buildInstrumentPayload();
       salvarRascunho(payload);
-      setSuccessMessage('Rascunho salvo com sucesso!');
-      setTimeout(() => {
-        onClose();
-      }, 500);
+      setIsApprovalConfirmOpen(false);
+      setPostSaveType('RASCUNHO');
+      setIsPostSavePromptOpen(true);
     } catch (err: any) {
       setErrorMessage(err.message || 'Erro ao salvar rascunho.');
+      setIsApprovalConfirmOpen(false);
     }
   };
 
-  // Handle Submit for Approval
-  const handleSubmitForApproval = () => {
-    setErrorMessage(null);
-
-    if (isProfessor && systemSettings.statusEdicao === 'BLOQUEADO') {
-      setErrorMessage('A criação/edição de instrumentos está BLOQUEADA pela coordenação.');
-      return;
-    }
-
-    // Strict Validation for submission
-    if (selectedTurmas.length === 0) {
-      setErrorMessage('Selecione ao menos 1 turma para o instrumento.');
-      return;
-    }
-
-    // Check delivery dates for all selected turmas
-    const missingDate = selectedTurmas.find((t) => !t.data || t.data.trim() === '');
-    if (missingDate) {
-      setErrorMessage(`Informe a data de entrega para a turma: ${missingDate.turmaNome}.`);
-      return;
-    }
-
-    if (!disciplinaId) {
-      setErrorMessage('Selecione uma disciplina.');
-      return;
-    }
-
-    if (!codigoIdentificador.trim()) {
-      setErrorMessage('Informe o código identificador do instrumento (ex: AV1, AV2).');
-      return;
-    }
-
-    if (!tipoNome.trim()) {
-      setErrorMessage('Informe o tipo/nome do instrumento avaliativo.');
-      return;
-    }
-
-    if (peso === '' || Number(peso) <= 0) {
-      setErrorMessage('Informe o peso/pontuação máxima do instrumento.');
-      return;
-    }
-
-    if (!conteudo.trim()) {
-      setErrorMessage('Informe o conteúdo curricular cobrado.');
-      return;
-    }
-
-    if (!fonteEstudo.trim()) {
-      setErrorMessage('Informe as fontes de estudo e materiais de apoio.');
-      return;
-    }
-
-    if (!desenvolvimento.trim()) {
-      setErrorMessage('Descreva o desenvolvimento pedagógico da atividade.');
-      return;
-    }
-
-    if (criterios.length === 0) {
-      setErrorMessage('Adicione ao menos 1 critério avaliativo com pontuação.');
-      return;
-    }
-
-    const emptyCriterio = criterios.find((c) => !c.descricao.trim());
-    if (emptyCriterio) {
-      setErrorMessage('Preencha a descrição de todos os critérios avaliativos.');
-      return;
-    }
-
-    try {
-      const payload = buildInstrumentPayload();
-      enviarParaAprovacao(payload);
-      setSuccessMessage('Instrumento enviado com sucesso para aprovação da coordenação!');
-      setTimeout(() => {
-        onClose();
-      }, 600);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Erro ao enviar para aprovação.');
-    }
-  };
-
-  // Direct save preserving status (e.g. for super admin or approved instruments)
+  // Salvamento direto (para admin/coord ou instrumentos já aprovados)
   const handleSaveDirect = () => {
     setErrorMessage(null);
     try {
@@ -409,13 +453,22 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
       } else {
         addInstrumento(payload as any);
       }
-      setSuccessMessage('Alterações salvas com sucesso!');
-      setTimeout(() => {
-        onClose();
-      }, 500);
+      setPostSaveType('SALVO');
+      setIsPostSavePromptOpen(true);
     } catch (err: any) {
       setErrorMessage(err.message || 'Erro ao salvar alterações.');
     }
+  };
+
+  // Resposta pós-salvamento: "Cadastrar outro instrumento?"
+  const handlePromptCadastrarOutro = () => {
+    setIsPostSavePromptOpen(false);
+    resetFormState(false);
+  };
+
+  const handlePromptFinalizar = () => {
+    setIsPostSavePromptOpen(false);
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -442,7 +495,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
           </button>
         </div>
 
-        {/* Rejection Alert Banner if editing a rejected instrument */}
+        {/* Rejection Alert Banner */}
         {initialInstrumento?.status === 'REJEITADO' && initialInstrumento.motivoRejeicao && (
           <div className="mx-6 mt-4 p-4 bg-rose-50 border border-rose-200 text-rose-900 rounded-xl">
             <div className="flex items-center gap-2 font-bold text-xs text-rose-800 mb-1">
@@ -474,7 +527,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
 
         {/* Scrollable Form Body */}
         <div className="p-6 space-y-5 overflow-y-auto flex-1 text-xs">
-          {/* Section 1: Turmas Vinculadas (Multi-turma com datas individuais) */}
+          {/* Section 1: Turmas Vinculadas e Datas */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -500,7 +553,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
               )}
             </div>
 
-            {/* Turmas Checkboxes/Pills */}
+            {/* Turmas Checkboxes */}
             <div className="flex flex-wrap gap-2">
               {effectiveTurmas.map((t) => {
                 const isSelected = selectedTurmas.some((st) => st.turmaId === t.id);
@@ -526,40 +579,41 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
               })}
             </div>
 
-            {/* Individual Delivery Dates Inputs for each selected class */}
+            {/* Data de Entrega Individual por Turma com input de data real */}
             {selectedTurmas.length > 0 && (
               <div className="pt-3 border-t border-slate-200 space-y-2">
                 <label className="text-[11px] font-bold text-slate-700 block">
-                  Data de Entrega Individual por Turma:
+                  Data de Entrega Individual por Turma *
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {selectedTurmas.map((st) => (
-                    <div
-                      key={st.turmaId}
-                      className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200 gap-2"
-                    >
-                      <span className="font-semibold text-slate-800 truncate text-xs">
-                        {st.turmaNome}
-                      </span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        <input
-                          type="text"
-                          required
-                          value={st.data}
-                          onChange={(e) => handleUpdateTurmaDate(st.turmaId, e.target.value)}
-                          placeholder="DD/MM/AAAA"
-                          className="w-28 text-xs border border-slate-300 rounded px-2 py-1 font-mono text-slate-800 focus:border-blue-500 focus:outline-none bg-slate-50 focus:bg-white"
-                        />
+                  {selectedTurmas.map((st) => {
+                    const isoDateVal = toDateInputValue(st.data);
+                    return (
+                      <div
+                        key={st.turmaId}
+                        className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200 gap-2 hover:border-blue-300 transition-colors"
+                      >
+                        <span className="font-semibold text-slate-800 truncate text-xs">
+                          {st.turmaNome}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="date"
+                            required
+                            value={isoDateVal}
+                            onChange={(e) => handleUpdateTurmaDate(st.turmaId, e.target.value)}
+                            className="text-xs border border-slate-300 rounded-md px-2.5 py-1 text-slate-800 font-medium focus:border-blue-500 focus:outline-none bg-slate-50 focus:bg-white cursor-pointer"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Section 2: Disciplina, Bimestre e Código */}
+          {/* Section 2: Disciplina, Bimestre e Instrumento (Antigo Código Identificador) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -599,20 +653,31 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Código Identificador *
+                Instrumento *
               </label>
-              <input
-                type="text"
+              <select
                 required
                 value={codigoIdentificador}
                 onChange={(e) => setCodigoIdentificador(e.target.value)}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 uppercase font-mono font-bold focus:bg-white"
-                placeholder="Ex: AV1, AV2, AV3"
-              />
+                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 focus:bg-white font-bold"
+              >
+                <option value="">Selecione o instrumento...</option>
+                {tiposInstrumento.map((tipo) => (
+                  <option key={tipo.id} value={tipo.nome}>
+                    {tipo.nome}
+                  </option>
+                ))}
+                {codigoIdentificador &&
+                  !tiposInstrumento.some(
+                    (t) => t.nome.toUpperCase() === codigoIdentificador.toUpperCase()
+                  ) && (
+                    <option value={codigoIdentificador}>{codigoIdentificador}</option>
+                  )}
+              </select>
             </div>
           </div>
 
-          {/* Section 3: Tipo do Instrumento e Pontuação */}
+          {/* Section 3: Tipo / Nome e Pontuação */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -644,13 +709,13 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
             </div>
           </div>
 
-          {/* Section 4: Conteúdo Cobrado & Fonte de Estudo */}
+          {/* Section 4: Conteúdo Cobrado & Fonte de Estudo (Auto-grow) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                 Conteúdo Cobrado *
               </label>
-              <textarea
+              <AutoResizeTextarea
                 rows={2}
                 required
                 value={conteudo}
@@ -664,7 +729,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                 Fonte de Estudo / Material *
               </label>
-              <textarea
+              <AutoResizeTextarea
                 rows={2}
                 required
                 value={fonteEstudo}
@@ -675,13 +740,13 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
             </div>
           </div>
 
-          {/* Section 5: Desenvolvimento Pedagógico */}
+          {/* Section 5: Desenvolvimento Pedagógico (Auto-grow) */}
           <div>
             <label className="block text-[11px] font-semibold text-slate-700 mb-1">
               Desenvolvimento Pedagógico da Atividade *
             </label>
-            <textarea
-              rows={4}
+            <AutoResizeTextarea
+              rows={3}
               required
               value={desenvolvimento}
               onChange={(e) => setDesenvolvimento(e.target.value)}
@@ -690,7 +755,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
             />
           </div>
 
-          {/* Section 6: Critérios Avaliativos */}
+          {/* Section 6: Critérios Avaliativos com Somatória e Auto-grow */}
           <div className="border-t border-slate-200 pt-4">
             <div className="flex items-center justify-between mb-2">
               <div>
@@ -701,13 +766,21 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
                   Defina os critérios e a pontuação individual de cada item.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleAddCriterio}
-                className="text-[11px] text-blue-600 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200 hover:bg-blue-100"
-              >
-                <Plus className="w-3.5 h-3.5" /> Adicionar Critério
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Somatória visível em tempo real */}
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 text-xs font-bold shadow-xs">
+                  <Calculator className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Total: {somaCriteriosFormatada} pts</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddCriterio}
+                  className="text-[11px] text-blue-600 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200 hover:bg-blue-100 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Adicionar Critério
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -717,41 +790,44 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
                 </div>
               )}
               {criterios.map((crit, idx) => (
-                <div key={crit.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                  <span className="text-[11px] font-bold text-slate-400 w-5 text-center">
+                <div key={crit.id} className="flex items-start gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[11px] font-bold text-slate-400 w-5 text-center mt-2">
                     {idx + 1}.
                   </span>
-                  <input
-                    type="text"
-                    required
-                    value={crit.descricao}
-                    onChange={(e) => {
-                      const updated = [...criterios];
-                      updated[idx].descricao = e.target.value;
-                      setCriterios(updated);
-                    }}
-                    className="flex-1 text-xs border border-slate-300 rounded-md p-1.5 bg-white text-slate-800"
-                    placeholder="Descrição do critério avaliativo..."
-                  />
-                  <div className="flex items-center gap-1 shrink-0">
-                    <input
-                      type="number"
-                      step="0.25"
+                  <div className="flex-1">
+                    <AutoResizeTextarea
+                      rows={1}
                       required
-                      value={crit.valor}
+                      value={crit.descricao}
                       onChange={(e) => {
                         const updated = [...criterios];
-                        updated[idx].valor = Number(e.target.value);
+                        updated[idx].descricao = e.target.value;
                         setCriterios(updated);
                       }}
-                      className="w-20 text-xs border border-slate-300 rounded-md p-1.5 bg-white text-slate-800 font-bold"
+                      className="w-full text-xs border border-slate-300 rounded-md p-1.5 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Descrição do critério avaliativo..."
+                    />
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                    <input
+                      type="text"
+                      required
+                      value={crit.valorInput}
+                      onChange={(e) => {
+                        const updated = [...criterios];
+                        updated[idx].valorInput = e.target.value;
+                        setCriterios(updated);
+                      }}
+                      className="w-20 text-xs border border-slate-300 rounded-md p-1.5 bg-white text-slate-800 font-bold text-center"
+                      placeholder="1,5"
                     />
                     <span className="text-[11px] text-slate-500 font-bold">pts</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleRemoveCriterio(crit.id)}
-                    className="text-slate-400 hover:text-red-500 p-1 cursor-pointer transition-colors"
+                    className="text-slate-400 hover:text-red-500 p-1.5 cursor-pointer transition-colors mt-0.5"
+                    title="Remover Critério"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -760,7 +836,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
             </div>
           </div>
 
-          {/* Section 7: Habilidades BNCC */}
+          {/* Section 7: Habilidades BNCC (Auto-grow) */}
           <div className="border-t border-slate-200 pt-4">
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
@@ -770,7 +846,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
               <button
                 type="button"
                 onClick={handleAddHabilidade}
-                className="text-[11px] text-purple-600 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200 hover:bg-purple-100"
+                className="text-[11px] text-purple-600 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200 hover:bg-purple-100 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" /> Adicionar Habilidade
               </button>
@@ -790,24 +866,27 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
                       updated[idx].codigo = e.target.value.toUpperCase();
                       setHabilidades(updated);
                     }}
-                    className="w-28 text-xs font-mono font-bold border border-slate-300 rounded p-1 bg-white text-slate-800 uppercase"
+                    className="w-28 text-xs font-mono font-bold border border-slate-300 rounded p-1.5 bg-white text-slate-800 uppercase shrink-0 mt-0.5"
                     placeholder="Ex: EF04CI06"
                   />
-                  <input
-                    type="text"
-                    value={hab.descricao}
-                    onChange={(e) => {
-                      const updated = [...habilidades];
-                      updated[idx].descricao = e.target.value;
-                      setHabilidades(updated);
-                    }}
-                    className="flex-1 text-xs border border-slate-300 rounded p-1 bg-white text-slate-800"
-                    placeholder="Descrição da habilidade BNCC correspondente..."
-                  />
+                  <div className="flex-1">
+                    <AutoResizeTextarea
+                      rows={1}
+                      value={hab.descricao}
+                      onChange={(e) => {
+                        const updated = [...habilidades];
+                        updated[idx].descricao = e.target.value;
+                        setHabilidades(updated);
+                      }}
+                      className="w-full text-xs border border-slate-300 rounded p-1.5 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      placeholder="Descrição da habilidade BNCC correspondente..."
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleRemoveHabilidade(hab.id)}
-                    className="text-slate-400 hover:text-red-500 p-1 cursor-pointer transition-colors"
+                    className="text-slate-400 hover:text-red-500 p-1.5 cursor-pointer transition-colors mt-0.5"
+                    title="Remover Habilidade"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -851,7 +930,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
             ) : (
               <button
                 type="button"
-                onClick={handleSubmitForApproval}
+                onClick={handleClickSubmitButton}
                 className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs cursor-pointer transition-colors"
               >
                 <Send className="w-3.5 h-3.5" />
@@ -867,6 +946,117 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* MODAL DE CONFIRMAÇÃO PARA ENVIO DE APROVAÇÃO */}
+      {isApprovalConfirmOpen && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto text-blue-600">
+                <Send className="w-6 h-6" />
+              </div>
+
+              <div className="text-center space-y-2">
+                <h4 className="text-base font-bold text-slate-900">
+                  Enviar para Aprovação
+                </h4>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Este instrumento será enviado para a aprovação da Coordenação Pedagógica.
+                  Após o envio, ele ficará <strong>bloqueado para edição</strong> enquanto estiver sob análise.
+                </p>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-800">
+                <HelpCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Caso ainda precise fazer alterações antes de formalizar o envio, você pode optar por <strong>Salvar como Rascunho</strong>.
+                </span>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsApprovalConfirmOpen(false)}
+                  className="w-full sm:w-auto px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  Voltar ao Formulário
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5 text-slate-500" />
+                  Salvar como Rascunho
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmSendForApproval}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs transition-colors cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Continuar e Enviar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PÓS-SALVAMENTO: "DESEJA CADASTRAR OUTRO INSTRUMENTO?" */}
+      {isPostSavePromptOpen && (
+        <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto text-emerald-600">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+
+              <div className="text-center space-y-1.5">
+                <h4 className="text-base font-bold text-slate-900">
+                  {postSaveType === 'ENVIADO'
+                    ? 'Instrumento Enviado com Sucesso!'
+                    : postSaveType === 'RASCUNHO'
+                    ? 'Rascunho Salvo com Sucesso!'
+                    : 'Alterações Salvas com Sucesso!'}
+                </h4>
+                <p className="text-xs text-slate-600">
+                  {postSaveType === 'ENVIADO'
+                    ? 'O instrumento avaliativo foi submetido e está aguardando revisão da coordenação.'
+                    : 'Os dados foram guardados e continuam disponíveis para edição a qualquer momento.'}
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center">
+                <p className="text-xs font-bold text-slate-800">
+                  Deseja cadastrar outro instrumento agora?
+                </p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Selecione "Sim" para abrir um novo formulário limpo ou "Não" para retornar à listagem.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={handlePromptFinalizar}
+                  className="px-5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                >
+                  Não, finalizar
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePromptCadastrarOutro}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Sim, cadastrar outro
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
