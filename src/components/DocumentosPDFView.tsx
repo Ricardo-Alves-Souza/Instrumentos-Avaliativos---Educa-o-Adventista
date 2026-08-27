@@ -64,6 +64,7 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
 
   // Zoom scale state
   const [zoomScale, setZoomScale] = useState<number>(100);
+  const previewScrollRef = React.useRef<HTMLElement>(null);
 
   const currentYear = new Date().getFullYear();
 
@@ -72,6 +73,15 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
 
   // Handle Print Action
   const handlePrint = () => {
+    // Reset scroll position before invoking browser print so entire document prints cleanly
+    if (previewScrollRef.current) {
+      previewScrollRef.current.scrollTop = 0;
+      previewScrollRef.current.scrollLeft = 0;
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+    }
+
     let documentName = 'Instrumento Avaliativo';
 
     if (generationMode === 'single') {
@@ -455,7 +465,10 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
       </aside>
 
       {/* RIGHT: INTERACTIVE A4 LIVE PREVIEW & PRINT CANVAS (Only this section scrolls vertically) */}
-      <main className="flex-1 flex flex-col items-center p-6 lg:p-8 overflow-y-auto h-full">
+      <main
+        ref={previewScrollRef}
+        className="flex-1 flex flex-col items-center p-6 lg:p-8 overflow-y-auto h-full"
+      >
         {/* Top Preview Toolbar (Hidden in Print) */}
         <div className="no-print w-full max-w-[210mm] mb-4 flex items-center justify-between bg-white px-4 py-2.5 rounded-lg border border-[#E5E7EB] shadow-xs shrink-0">
           <div className="flex items-center gap-2">

@@ -20,12 +20,25 @@
 }
 
 @media print {
+  /* Remove scrollbars from everything during print */
+  *,
+  *::before,
+  *::after {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
   /* Ensure browser and root elements are 100% white with 0 outer margins */
   html,
   body {
-    width: 210mm !important;
+    width: 100% !important;
     height: auto !important;
-    min-height: 0 !important;
+    min-height: 100% !important;
     max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -34,15 +47,30 @@
     color: #111827 !important;
     font-size: 10.5pt;
     overflow: visible !important;
+    position: static !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Reset all higher-level application wrappers so pages are never clipped */
+  /* Reset ALL ancestor application wrappers and scroll containers so pages are never clipped or scrolled */
   #root,
-  #root > div,
+  #root div,
+  #root main,
+  #root section,
+  #root aside,
   .app-layout,
-  .print-wrapper {
+  .print-wrapper,
+  .overflow-hidden,
+  .overflow-y-auto,
+  .overflow-x-hidden,
+  .overflow-auto,
+  .h-screen,
+  .max-h-screen,
+  .min-h-screen,
+  .h-full,
+  .flex,
+  .flex-col,
+  .flex-row {
     background: #ffffff !important;
     background-color: #ffffff !important;
     padding: 0 !important;
@@ -77,27 +105,38 @@
     flex-shrink: 0 !important;
   }
 
-  .no-print {
+  .no-print,
+  .no-print * {
     display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
   }
 
   /* Remove any zoom transforms applied in the preview area */
   .print-sheets-list,
   [style*="transform"] {
     transform: none !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     width: 210mm !important;
     max-width: 210mm !important;
     display: block !important;
+    overflow: visible !important;
   }
 
   /* Each sheet container represents an exact A4 page */
   .print-page-container {
     width: 210mm !important;
+    min-width: 210mm !important;
+    max-width: 210mm !important;
     min-height: 297mm !important;
+    height: auto !important;
     box-sizing: border-box !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 14mm 16mm 14mm 16mm !important;
     background: #ffffff !important;
     background-color: #ffffff !important;
