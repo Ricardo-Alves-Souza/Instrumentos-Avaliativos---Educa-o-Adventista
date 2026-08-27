@@ -163,13 +163,13 @@ function MainAppContent() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F3F4F6] text-[#1A1A1A] antialiased selection:bg-[#EFF6FF] selection:text-[#1E40AF]">
+    <div className="app-layout-root flex min-h-screen bg-[#F3F4F6] text-[#1A1A1A] antialiased selection:bg-[#EFF6FF] selection:text-[#1E40AF]">
       {/* Sidebar Navigation */}
       <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} />
 
       {/* Workspace Content Router */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        <main className="flex-1">
+      <div className="app-content-wrapper flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        <main className="app-main-content flex-1">
           {activeTab === 'dashboard' && (
             <DashboardView
               onNavigateToDocumentos={handleNavigateToDocumentos}

@@ -202,7 +202,7 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
   );
 
   return (
-    <div className="flex flex-col lg:flex-row h-screen max-h-screen overflow-hidden bg-[#F3F4F6]">
+    <div className="pdf-view-container flex flex-col lg:flex-row h-screen max-h-screen overflow-hidden bg-[#F3F4F6]">
       {/* CONTROL & EXPORT PANEL (Fixed on screen, only its inner content scrolls if needed) */}
       <aside className="no-print w-full lg:w-[360px] bg-white border-r border-[#E5E7EB] p-6 flex flex-col gap-5 shrink-0 overflow-y-auto shadow-xs h-auto lg:h-full">
         {/* Title Header */}
@@ -467,7 +467,7 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
       {/* RIGHT: INTERACTIVE A4 LIVE PREVIEW & PRINT CANVAS (Only this section scrolls vertically) */}
       <main
         ref={previewScrollRef}
-        className="flex-1 flex flex-col items-center p-6 lg:p-8 overflow-y-auto h-full"
+        className="pdf-preview-main flex-1 flex flex-col items-center p-6 lg:p-8 overflow-y-auto h-full"
       >
         {/* Top Preview Toolbar (Hidden in Print) */}
         <div className="no-print w-full max-w-[210mm] mb-4 flex items-center justify-between bg-white px-4 py-2.5 rounded-lg border border-[#E5E7EB] shadow-xs shrink-0">

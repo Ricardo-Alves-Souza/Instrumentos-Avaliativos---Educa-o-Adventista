@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface AdventistLogoProps {
   className?: string;
@@ -10,6 +10,7 @@ export const AdventistLogo: React.FC<AdventistLogoProps> = ({
   size = 42,
 }) => {
   const height = Math.round((size * 88) / 100);
+  const [imgError, setImgError] = useState(false);
 
   return (
     <div
@@ -23,20 +24,44 @@ export const AdventistLogo: React.FC<AdventistLogoProps> = ({
       }}
       aria-label="Logo Colégio Adventista"
     >
-      <img
-        src="/logo.jpeg"
-        alt="Logo Colégio Adventista"
-        className="adventist-logo-img w-full h-full object-contain block"
-        style={{
-          width: `${size}px`,
-          maxWidth: `${size}px`,
-          height: `${height}px`,
-          maxHeight: `${height}px`,
-        }}
-        referrerPolicy="no-referrer"
-      />
+      {!imgError ? (
+        <img
+          src="/logo.jpeg"
+          alt="Logo Colégio Adventista"
+          className="adventist-logo-img block"
+          style={{
+            width: `${size}px`,
+            maxWidth: `${size}px`,
+            minWidth: `${size}px`,
+            height: `${height}px`,
+            maxHeight: `${height}px`,
+            objectFit: 'contain',
+          }}
+          onError={() => setImgError(true)}
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <svg
+          viewBox="0 0 116 102"
+          fill="#0c3966"
+          xmlns="http://www.w3.org/2000/svg"
+          className="adventist-logo-svg block"
+          style={{
+            width: `${size}px`,
+            maxWidth: `${size}px`,
+            minWidth: `${size}px`,
+            height: `${height}px`,
+            maxHeight: `${height}px`,
+          }}
+        >
+          <path d="M 45 0 L 59 0 L 78.5 45.2 C 75.2 46.5 71.8 48.2 68.6 50.1 L 52.2 12.3 L 42.8 33.8 C 40.2 36.3 37.9 39 35.8 41.9 L 45 0 Z" />
+          <path d="M 22.8 53.2 C 22.8 49.2 25.1 46.2 28.8 44.4 C 34.5 41.6 44.8 38.2 57.9 33.8 C 72.1 29.1 84.9 23.6 94.5 18.8 C 97.1 23.2 96.8 27.2 94.1 30.6 C 87.5 36.5 75.1 42.4 60.1 47.7 C 46.7 52.4 34.9 56.8 24.5 57.5 C 23.4 56.2 22.8 54.7 22.8 53.2 Z" />
+          <path d="M 17.1 69.1 C 17.1 64.8 19.6 61.4 23.7 59.3 C 30.1 56.1 41.8 52.2 56.7 47.2 C 72.5 41.9 87.1 35.6 98.5 29.9 C 100.6 34.4 99.9 38.5 96.7 42.1 C 89.1 48.6 74.8 55.2 57.5 61.1 C 42.4 66.3 29.1 71.4 18.8 73.1 C 17.7 71.9 17.1 70.5 17.1 69.1 Z" />
+          <path d="M 12.5 85.6 C 12.5 80.9 15.4 77.2 20.1 74.8 C 27.2 71.2 40.2 66.9 56.8 61.4 C 74.1 55.7 89.9 48.8 102.7 42.4 C 104.1 47.1 102.8 51.4 99 55.2 C 90.4 62.4 74.1 69.8 54.7 76.3 C 38.1 81.9 23.9 87.7 14.1 89.8 C 13 88.5 12.5 87.1 12.5 85.6 Z" />
+          <path d="M 75.8 68.4 L 108.5 98.5 L 81.5 97.2 L 69.8 70.2 C 71.8 69.6 73.8 69 75.8 68.4 Z" />
+          <path d="M 8.8 98.5 L 34.8 94.6 L 39.2 77.3 C 28 82.9 17.5 89.8 8.8 98.5 Z" />
+        </svg>
+      )}
     </div>
   );
 };
-
-

@@ -47,64 +47,11 @@
     color: #111827 !important;
     font-size: 10.5pt;
     overflow: visible !important;
-    position: static !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Reset ALL ancestor application wrappers and scroll containers so pages are never clipped or scrolled */
-  #root,
-  #root div,
-  #root main,
-  #root section,
-  #root aside,
-  .app-layout,
-  .print-wrapper,
-  .overflow-hidden,
-  .overflow-y-auto,
-  .overflow-x-hidden,
-  .overflow-auto,
-  .h-screen,
-  .max-h-screen,
-  .min-h-screen,
-  .h-full,
-  .flex,
-  .flex-col,
-  .flex-row {
-    background: #ffffff !important;
-    background-color: #ffffff !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    overflow: visible !important;
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    position: static !important;
-    box-shadow: none !important;
-    border: none !important;
-    transform: none !important;
-  }
-
-  /* Explicit sizing locks for institutional logo in print */
-  .adventist-logo-container {
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-shrink: 0 !important;
-    background: transparent !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .adventist-logo-container img,
-  .adventist-logo-img {
-    display: block !important;
-    object-fit: contain !important;
-    flex-shrink: 0 !important;
-  }
-
+  /* Hide all UI controls, navigation and sidebars */
   .no-print,
   .no-print * {
     display: none !important;
@@ -116,9 +63,30 @@
     overflow: hidden !important;
   }
 
-  /* Remove any zoom transforms applied in the preview area */
-  .print-sheets-list,
-  [style*="transform"] {
+  /* Reset ONLY the specific structural ancestor layout containers leading to the document */
+  #root,
+  .app-layout-root,
+  .app-content-wrapper,
+  .app-main-content,
+  .pdf-view-container,
+  .pdf-preview-main {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Remove any zoom preview scale transforms during print */
+  .print-sheets-list {
     transform: none !important;
     margin: 0 auto !important;
     padding: 0 !important;
@@ -168,6 +136,27 @@
     display: flex !important;
     flex-direction: column !important;
     justify-content: space-between !important;
+  }
+
+  /* Institutional Logo specific protection */
+  .adventist-logo-container {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    background: transparent !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .adventist-logo-container img,
+  .adventist-logo-img,
+  .adventist-logo-svg {
+    display: block !important;
+    object-fit: contain !important;
+    flex-shrink: 0 !important;
+    max-width: none !important;
   }
 
   /* Avoid awkward page break splits within indivisible modules */
