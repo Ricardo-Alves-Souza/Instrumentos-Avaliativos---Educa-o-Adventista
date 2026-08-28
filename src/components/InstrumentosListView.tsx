@@ -50,6 +50,7 @@ export const InstrumentosListView: React.FC<InstrumentosListViewProps> = ({
     aprovarInstrumento,
     rejeitarInstrumento,
     liberarParaModificacao,
+    bloquearEdicao,
   } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -416,6 +417,7 @@ export const InstrumentosListView: React.FC<InstrumentosListViewProps> = ({
         onApprove={(id) => aprovarInstrumento(id)}
         onOpenRejectModal={(inst) => setRejectingInst(inst)}
         onLiberar={(id) => liberarParaModificacao(id)}
+        onBloquear={(id) => bloquearEdicao(id)}
       />
 
       {/* Reject Modal */}

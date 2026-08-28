@@ -12,6 +12,8 @@ import {
   TrendingUp,
   XCircle,
   Unlock,
+  Lock,
+  X,
   FileEdit,
   Plus,
   Eye,
@@ -55,6 +57,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     aprovarInstrumento,
     rejeitarInstrumento,
     liberarParaModificacao,
+    bloquearEdicao,
   } = useApp();
 
   const isProfessor = currentUser.role === 'PROFESSOR';
@@ -103,6 +106,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Modals state
   const [selectedDetailInst, setSelectedDetailInst] = useState<InstrumentoAvaliativo | null>(null);
   const [rejectingInst, setRejectingInst] = useState<InstrumentoAvaliativo | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [loadingActionId, setLoadingActionId] = useState<string | null>(null);
+
+  // Auto dismiss toast after 4s
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const handleAprovar = async (id: string) => {
+    try {
+      setLoadingActionId(id);
+      await aprovarInstrumento(id);
+      setToast({ message: 'Instrumento avaliativo aprovado com sucesso!', type: 'success' });
+    } catch (err: any) {
+      setToast({ message: err.message || 'Falha ao aprovar instrumento.', type: 'error' });
+    } finally {
+      setLoadingActionId(null);
+    }
+  };
+
+  const handleLiberarEdicao = async (id: string) => {
+    try {
+      setLoadingActionId(id);
+      await liberarParaModificacao(id);
+      setToast({ message: 'Instrumento liberado para edição pelo professor com sucesso.', type: 'success' });
+    } catch (err: any) {
+      setToast({ message: err.message || 'Falha ao liberar instrumento para edição.', type: 'error' });
+    } finally {
+      setLoadingActionId(null);
+    }
+  };
+
+  const handleBloquearEdicao = async (id: string) => {
+    try {
+      setLoadingActionId(id);
+      await bloquearEdicao(id);
+      setToast({ message: 'Edição bloqueada com sucesso. O instrumento retornou ao status Aprovado.', type: 'success' });
+    } catch (err: any) {
+      setToast({ message: err.message || 'Falha ao bloquear edição do instrumento.', type: 'error' });
+    } finally {
+      setLoadingActionId(null);
+    }
+  };
 
   // Sync selected turma whenever selected series or available turmas for that series change
   useEffect(() => {
@@ -799,32 +847,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                       Ver Detalhes
                                     </button>
 
-                                    {inst.status === 'ENVIADO' && (
+                                    {canApproveOrReject() && inst.status === 'ENVIADO' && (
                                       <>
                                         <button
                                           type="button"
+                                          disabled={loadingActionId === inst.id}
                                           onClick={() => setRejectingInst(inst)}
-                                          className="text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                          className="text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                                         >
                                           Rejeitar
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => aprovarInstrumento(inst.id)}
-                                          className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                          disabled={loadingActionId === inst.id}
+                                          onClick={() => handleAprovar(inst.id)}
+                                          className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                                         >
-                                          Aprovar
+                                          {loadingActionId === inst.id ? 'Aprovando...' : 'Aprovar'}
                                         </button>
                                       </>
                                     )}
 
-                                    {inst.status === 'APROVADO' && (
+                                    {canApproveOrReject() && inst.status === 'APROVADO' && (
                                       <button
                                         type="button"
-                                        onClick={() => liberarParaModificacao(inst.id)}
-                                        className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                        disabled={loadingActionId === inst.id}
+                                        onClick={() => handleLiberarEdicao(inst.id)}
+                                        className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                                        title="Liberar este instrumento para edição pelo professor"
                                       >
-                                        Liberar p/ Edição
+                                        <Unlock className="w-3.5 h-3.5" />
+                                        {loadingActionId === inst.id ? 'Liberando...' : 'Liberar p/ Edição'}
+                                      </button>
+                                    )}
+
+                                    {canApproveOrReject() && inst.status === 'LIBERADO_MODIFICACAO' && (
+                                      <button
+                                        type="button"
+                                        disabled={loadingActionId === inst.id}
+                                        onClick={() => handleBloquearEdicao(inst.id)}
+                                        className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                                        title="Bloquear edição e reverter para aprovado"
+                                      >
+                                        <Lock className="w-3.5 h-3.5" />
+                                        {loadingActionId === inst.id ? 'Bloqueando...' : 'Bloquear Edição'}
                                       </button>
                                     )}
                                   </div>
@@ -851,9 +917,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         onEdit={(inst) => {
           if (onOpenEditModal) onOpenEditModal(inst);
         }}
-        onApprove={(id) => aprovarInstrumento(id)}
+        onApprove={(id) => handleAprovar(id)}
         onOpenRejectModal={(inst) => setRejectingInst(inst)}
-        onLiberar={(id) => liberarParaModificacao(id)}
+        onLiberar={(id) => handleLiberarEdicao(id)}
+        onBloquear={(id) => handleBloquearEdicao(id)}
       />
 
       {/* Reject Modal */}
@@ -863,6 +930,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         onClose={() => setRejectingInst(null)}
         onConfirm={(id, motivo) => rejeitarInstrumento(id, motivo)}
       />
+
+      {/* Floating Toast Notification */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed bottom-6 right-6 z-50 max-w-md p-4 rounded-xl shadow-xl border flex items-center justify-between gap-3 transition-all duration-300 animate-in fade-in slide-in-from-bottom-5 ${
+            toast.type === 'success'
+              ? 'bg-emerald-900 text-white border-emerald-700'
+              : 'bg-rose-900 text-white border-rose-700'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 text-xs font-semibold">
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            )}
+            <span>{toast.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="text-white/70 hover:text-white p-1 rounded-md transition-colors cursor-pointer ml-2"
+            title="Fechar aviso"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

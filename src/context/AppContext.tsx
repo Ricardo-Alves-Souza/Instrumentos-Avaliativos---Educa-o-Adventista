@@ -131,6 +131,7 @@ interface AppContextType {
   aprovarInstrumento: (id: string) => Promise<void>;
   rejeitarInstrumento: (id: string, motivo: string) => Promise<void>;
   liberarParaModificacao: (id: string) => Promise<void>;
+  bloquearEdicao: (id: string) => Promise<void>;
 
   // Helper selectors
   getProfessorDisciplinas: (professorId: string) => Disciplina[];
@@ -1066,6 +1067,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setInstrumentos((prev) => prev.map((i) => (i.id === id ? updated : i)));
   };
 
+  const bloquearEdicao = async (id: string) => {
+    if (currentUser.role === 'PROFESSOR') {
+      throw new Error('Apenas coordenadores e administradores podem bloquear a edição de instrumentos.');
+    }
+    const inst = instrumentos.find((i) => i.id === id);
+    if (!inst) return;
+
+    const dateNow = new Date().toLocaleString('pt-BR');
+    const updated: InstrumentoAvaliativo = {
+      ...inst,
+      status: 'APROVADO',
+      dataAprovacao: dateNow,
+      coordenadorId: currentUser.id,
+      coordenadorNome: currentUser.nome,
+      motivoRejeicao: undefined,
+      historico: [
+        ...(inst.historico || []),
+        {
+          status: 'APROVADO',
+          data: dateNow,
+          usuarioNome: currentUser.nome,
+          usuarioRole: currentUser.role,
+          motivo: 'Edição bloqueada pela coordenação (Status revertido para Aprovado)',
+        },
+      ],
+    };
+
+    const res = await dbSaveInstrumento(updated);
+    if (!res.success) {
+      throw new Error(res.error || 'Falha ao bloquear edição do instrumento no Supabase.');
+    }
+
+    setInstrumentos((prev) => prev.map((i) => (i.id === id ? updated : i)));
+  };
+
   // Helper Selectors
   const getProfessorDisciplinas = (professorId: string): Disciplina[] => {
     const atrib = atribuicoes.find((a) => a.professorId === professorId);
@@ -1273,6 +1309,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         aprovarInstrumento,
         rejeitarInstrumento,
         liberarParaModificacao,
+        bloquearEdicao,
         getProfessorDisciplinas,
         getProfessorTurmas,
         getAccessibleTurmas,

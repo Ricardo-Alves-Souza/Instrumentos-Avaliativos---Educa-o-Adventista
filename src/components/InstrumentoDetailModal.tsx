@@ -10,6 +10,7 @@ import {
   FileEdit,
   History,
   Unlock,
+  Lock,
   AlertCircle,
   Building,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ interface InstrumentoDetailModalProps {
   onApprove?: (id: string) => void;
   onOpenRejectModal?: (inst: InstrumentoAvaliativo) => void;
   onLiberar?: (id: string) => void;
+  onBloquear?: (id: string) => void;
 }
 
 export const InstrumentoDetailModal: React.FC<InstrumentoDetailModalProps> = ({
@@ -34,6 +36,7 @@ export const InstrumentoDetailModal: React.FC<InstrumentoDetailModalProps> = ({
   onApprove,
   onOpenRejectModal,
   onLiberar,
+  onBloquear,
 }) => {
   const { currentUser, canEditInstrument, canApproveOrReject } = useApp();
 
@@ -354,7 +357,25 @@ export const InstrumentoDetailModal: React.FC<InstrumentoDetailModalProps> = ({
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shadow-xs cursor-pointer"
               >
                 <Unlock className="w-4 h-4" />
-                Liberar para Modificação
+                Liberar p/ Edição
+              </button>
+            )}
+
+            {canManage && instrumento.status === 'LIBERADO_MODIFICACAO' && (onBloquear || onApprove) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onBloquear) {
+                    onBloquear(instrumento.id);
+                  } else if (onApprove) {
+                    onApprove(instrumento.id);
+                  }
+                  onClose();
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors shadow-xs cursor-pointer"
+              >
+                <Lock className="w-4 h-4" />
+                Bloquear Edição
               </button>
             )}
 
