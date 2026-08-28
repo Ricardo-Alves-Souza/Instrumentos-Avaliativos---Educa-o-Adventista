@@ -14,6 +14,7 @@ import {
   KeyRound,
   Power,
   Layers,
+  Cpu,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { User, UserRole, SegmentoEscolar } from '../types';
@@ -39,7 +40,7 @@ export const UsuariosView: React.FC = () => {
   } = useApp();
 
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<'all' | UserRole>('all');
 
   // Modal Novo / Editar Usuário
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -63,8 +64,8 @@ export const UsuariosView: React.FC = () => {
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const isSuperAdmin = baseUser.role === 'SUPER_ADMIN';
-  const isAuthorized = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR';
+  const isAdminOrTI = baseUser.role === 'SUPER_ADMIN' || baseUser.role === 'TI';
+  const isAuthorized = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'TI' || currentUser.role === 'COORDENADOR';
 
   if (!isAuthorized) {
     return (
@@ -73,7 +74,7 @@ export const UsuariosView: React.FC = () => {
           <AlertOctagon className="w-12 h-12 text-red-500 mx-auto mb-3" />
           <h2 className="text-base font-bold text-[#111827]">Acesso Restrito</h2>
           <p className="text-xs text-[#6B7280] max-w-md mx-auto mt-1">
-            Esta tela é de uso exclusivo de administradores e coordenadores pedagógicos.
+            Esta tela é de uso exclusivo de administradores, equipe de TI e coordenadores pedagógicos.
           </p>
         </div>
       </div>
@@ -81,9 +82,9 @@ export const UsuariosView: React.FC = () => {
   }
 
   const handleOpenModal = (u?: User) => {
-    // Security check: Coordenador cannot edit Super Admin
-    if (u && u.role === 'SUPER_ADMIN' && !isSuperAdmin) {
-      alert('Acesso negado: Apenas o Super Administrador pode visualizar ou editar esta conta.');
+    // Security check: Coordenador cannot edit Super Admin or TI
+    if (u && (u.role === 'SUPER_ADMIN' || u.role === 'TI') && !isAdminOrTI) {
+      alert('Acesso negado: Apenas administradores e equipe de TI podem visualizar ou editar esta conta.');
       return;
     }
 
@@ -131,8 +132,8 @@ export const UsuariosView: React.FC = () => {
 
     try {
       if (editingUser) {
-        if (!isSuperAdmin && (editingUser.role === 'SUPER_ADMIN' || role === 'SUPER_ADMIN')) {
-          setFormError('Acesso negado: Coordenação não pode gerenciar ou atribuir perfil de Super Administrador.');
+        if (!isAdminOrTI && (editingUser.role === 'SUPER_ADMIN' || editingUser.role === 'TI' || role === 'SUPER_ADMIN' || role === 'TI')) {
+          setFormError('Acesso negado: Coordenação não pode gerenciar ou atribuir perfis de Administrador ou TI.');
           setIsSaving(false);
           return;
         }
@@ -145,8 +146,8 @@ export const UsuariosView: React.FC = () => {
           segmentosPermitidos: role === 'COORDENADOR' ? segmentosPermitidos : undefined,
         });
       } else {
-        if (!isSuperAdmin && role === 'SUPER_ADMIN') {
-          setFormError('Acesso negado: Coordenação não pode criar usuários com perfil de Super Administrador.');
+        if (!isAdminOrTI && (role === 'SUPER_ADMIN' || role === 'TI')) {
+          setFormError('Acesso negado: Coordenação não pode criar usuários com perfil de Administrador ou TI.');
           setIsSaving(false);
           return;
         }
@@ -221,11 +222,19 @@ export const UsuariosView: React.FC = () => {
 
   const filteredUsers = accessibleUsers.filter((u) => {
     const matchSearch =
-      u.nome.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase());
-    const matchRole = roleFilter === 'all' || u.role === roleFilter;
+      (u.nome || '').toLowerCase().includes(search.toLowerCase()) ||
+      (u.email || '').toLowerCase().includes(search.toLowerCase());
+    const matchRole = activeTab === 'all' || u.role === activeTab;
     return matchSearch && matchRole;
   });
+
+  const countByRole = {
+    all: accessibleUsers.length,
+    SUPER_ADMIN: accessibleUsers.filter((u) => u.role === 'SUPER_ADMIN').length,
+    TI: accessibleUsers.filter((u) => u.role === 'TI').length,
+    COORDENADOR: accessibleUsers.filter((u) => u.role === 'COORDENADOR').length,
+    PROFESSOR: accessibleUsers.filter((u) => u.role === 'PROFESSOR').length,
+  };
 
   const getRoleBadge = (userRole: UserRole) => {
     switch (userRole) {
@@ -234,6 +243,13 @@ export const UsuariosView: React.FC = () => {
           <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
             <ShieldCheck className="w-3 h-3 text-purple-600" />
             Super Admin
+          </span>
+        );
+      case 'TI':
+        return (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <Cpu className="w-3 h-3 text-indigo-600" />
+            TI / Suporte
           </span>
         );
       case 'COORDENADOR':
@@ -290,7 +306,7 @@ export const UsuariosView: React.FC = () => {
             Gestão de Usuários e Permissões
           </h1>
           <p className="text-xs text-[#6B7280] mt-0.5">
-            Cadastre professores, coordenadores, defina segmentos de atuação e gerencie acessos e senhas com segurança.
+            Cadastre e separe visualmente contas por perfil (Super Admin, TI, Coordenador e Professor).
           </p>
         </div>
 
@@ -301,6 +317,93 @@ export const UsuariosView: React.FC = () => {
         >
           <UserPlus className="w-4 h-4" />
           <span>Novo Usuário</span>
+        </button>
+      </div>
+
+      {/* Tabs por Perfil (Separação Visual dos Usuários) */}
+      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-[#F3F4F6] rounded-xl border border-[#E5E7EB]">
+        <button
+          type="button"
+          onClick={() => setActiveTab('all')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'all'
+              ? 'bg-white text-[#111827] shadow-xs'
+              : 'text-[#6B7280] hover:text-[#111827]'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5 text-slate-500" />
+          <span>Todos</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200/80 text-slate-700">
+            {countByRole.all}
+          </span>
+        </button>
+
+        {isAdminOrTI && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('SUPER_ADMIN')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'SUPER_ADMIN'
+                ? 'bg-white text-purple-700 shadow-xs'
+                : 'text-[#6B7280] hover:text-purple-700'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+            <span>Super Admin</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700">
+              {countByRole.SUPER_ADMIN}
+            </span>
+          </button>
+        )}
+
+        {isAdminOrTI && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('TI')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'TI'
+                ? 'bg-white text-indigo-700 shadow-xs'
+                : 'text-[#6B7280] hover:text-indigo-700'
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Equipe TI</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-indigo-100 text-indigo-700">
+              {countByRole.TI}
+            </span>
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('COORDENADOR')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'COORDENADOR'
+              ? 'bg-white text-blue-700 shadow-xs'
+              : 'text-[#6B7280] hover:text-blue-700'
+          }`}
+        >
+          <Shield className="w-3.5 h-3.5 text-blue-600" />
+          <span>Coordenadores</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-700">
+            {countByRole.COORDENADOR}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('PROFESSOR')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'PROFESSOR'
+              ? 'bg-white text-emerald-700 shadow-xs'
+              : 'text-[#6B7280] hover:text-emerald-700'
+          }`}
+        >
+          <GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
+          <span>Professores</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700">
+            {countByRole.PROFESSOR}
+          </span>
         </button>
       </div>
 
@@ -317,18 +420,9 @@ export const UsuariosView: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-[#6B7280]">Filtrar por perfil:</label>
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="text-xs border border-[#E5E7EB] rounded-lg px-3 py-2 bg-[#F9FAFB] text-[#111827] font-medium"
-          >
-            <option value="all">Todos os Perfis ({accessibleUsers.length})</option>
-            <option value="PROFESSOR">Professores</option>
-            <option value="COORDENADOR">Coordenadores</option>
-            {isSuperAdmin && <option value="SUPER_ADMIN">Super Administradores</option>}
-          </select>
+        <div className="text-xs text-[#6B7280] font-medium">
+          Exibindo <strong className="text-[#111827]">{filteredUsers.length}</strong> de{' '}
+          <strong>{accessibleUsers.length}</strong> usuários
         </div>
       </div>
 
@@ -384,6 +478,20 @@ export const UsuariosView: React.FC = () => {
                   </div>
                 )}
 
+                {u.role === 'TI' && (
+                  <div className="text-[11px] text-indigo-700 bg-indigo-50/70 p-2.5 rounded-lg border border-indigo-100 flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Acesso total à infraestrutura, auditoria e cadastros do sistema.</span>
+                  </div>
+                )}
+
+                {u.role === 'SUPER_ADMIN' && (
+                  <div className="text-[11px] text-purple-700 bg-purple-50/70 p-2.5 rounded-lg border border-purple-100 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
+                    <span>Acesso irrestrito com privilégios de Super Administrador.</span>
+                  </div>
+                )}
+
                 {u.role === 'PROFESSOR' && (
                   <div className="text-[11px] text-[#6B7280] space-y-1 bg-[#F9FAFB] p-2.5 rounded-lg border border-[#F3F4F6]">
                     <div className="flex justify-between">
@@ -398,54 +506,45 @@ export const UsuariosView: React.FC = () => {
                 )}
               </div>
 
-              <div className="mt-4 pt-3 border-t border-[#F3F4F6] flex items-center justify-between flex-wrap gap-2">
-                <span className="text-[10px] text-[#9CA3AF] font-medium">
-                  {currentUser.id === u.id ? (
-                    <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      Sua Conta Atual
-                    </span>
-                  ) : isUserActive ? (
-                    <span className="text-slate-500">Conta Habilitada</span>
-                  ) : (
-                    <span className="text-red-600 font-semibold">Conta Suspensa</span>
-                  )}
-                </span>
-
-                <div className="flex items-center gap-1 ml-auto">
-                  {/* Redefinir Senha: Somente Super Admin */}
-                  {isSuperAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenResetModal(u)}
-                      className="p-1.5 text-[#6B7280] hover:text-amber-600 hover:bg-amber-50 rounded cursor-pointer transition-colors"
-                      title="Solicitar Redefinição de Senha no Supabase"
-                    >
-                      <KeyRound className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-
+              {/* Ações do Card */}
+              <div className="pt-4 mt-4 border-t border-[#F3F4F6] flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1">
                   {/* Ativar/Desativar Usuário */}
-                  {isSuperAdmin && u.id !== currentUser.id && u.role !== 'SUPER_ADMIN' && (
+                  {u.id !== currentUser.id && (isAdminOrTI || (u.role !== 'SUPER_ADMIN' && u.role !== 'TI')) && (
                     <button
                       type="button"
                       onClick={() => handleToggleActive(u)}
                       className={`p-1.5 rounded cursor-pointer transition-colors ${
                         isUserActive
-                          ? 'text-gray-400 hover:text-red-600 hover:bg-red-50'
-                          : 'text-emerald-600 hover:bg-emerald-50'
+                          ? 'text-[#6B7280] hover:text-red-600 hover:bg-red-50'
+                          : 'text-red-600 hover:text-emerald-600 hover:bg-emerald-50'
                       }`}
-                      title={isUserActive ? 'Desativar Usuário (bloqueia login)' : 'Reativar Usuário'}
+                      title={isUserActive ? 'Desativar Usuário' : 'Ativar Usuário'}
                     >
                       <Power className="w-3.5 h-3.5" />
                     </button>
                   )}
 
+                  {/* Redefinir Senha */}
+                  {isAdminOrTI && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenResetModal(u)}
+                      className="p-1.5 text-[#6B7280] hover:text-amber-600 hover:bg-amber-50 rounded cursor-pointer transition-colors"
+                      title="Redefinir Senha"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
                   {/* Editar Usuário */}
-                  {(isSuperAdmin || u.role !== 'SUPER_ADMIN') && (
+                  {(isAdminOrTI || (u.role !== 'SUPER_ADMIN' && u.role !== 'TI')) && (
                     <button
                       type="button"
                       onClick={() => handleOpenModal(u)}
-                      className="p-1.5 text-[#6B7280] hover:text-[#3B82F6] hover:bg-[#EFF6FF] rounded cursor-pointer transition-colors"
+                      className="p-1.5 text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6] rounded cursor-pointer transition-colors"
                       title="Editar Usuário"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -453,7 +552,7 @@ export const UsuariosView: React.FC = () => {
                   )}
 
                   {/* Excluir Usuário */}
-                  {u.id !== currentUser.id && (isSuperAdmin || u.role !== 'SUPER_ADMIN') && (
+                  {u.id !== currentUser.id && (isAdminOrTI || (u.role !== 'SUPER_ADMIN' && u.role !== 'TI')) && (
                     <button
                       type="button"
                       onClick={() => setUserToDelete(u)}
@@ -557,7 +656,8 @@ export const UsuariosView: React.FC = () => {
                 >
                   <option value="PROFESSOR">Professor (Docente)</option>
                   <option value="COORDENADOR">Coordenador Pedagógico</option>
-                  {isSuperAdmin && <option value="SUPER_ADMIN">Super Administrador</option>}
+                  {isAdminOrTI && <option value="TI">TI / Suporte Técnico</option>}
+                  {isAdminOrTI && <option value="SUPER_ADMIN">Super Administrador</option>}
                 </select>
               </div>
 
@@ -628,7 +728,7 @@ export const UsuariosView: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL REDEFINIR SENHA (SUPER ADMIN) */}
+      {/* MODAL REDEFINIR SENHA (SUPER ADMIN & TI) */}
       {isResetModalOpen && resetTargetUser && (
         <div className="fixed inset-0 z-50 bg-[#111827]/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-xl shadow-xl border border-[#E5E7EB] overflow-hidden">
@@ -649,11 +749,11 @@ export const UsuariosView: React.FC = () => {
             </div>
 
             <div className="p-6 space-y-4">
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 leading-relaxed">
-                Você está solicitando o link oficial de redefinição de senha para:{' '}
-                <strong>{resetTargetUser.nome}</strong> ({resetTargetUser.email}).
-                O Supabase enviará um link seguro ao e-mail institucional do usuário.
-              </div>
+              <p className="text-xs text-[#4B5563] leading-relaxed">
+                Você está solicitando a recuperação de senha para{' '}
+                <strong className="text-[#111827]">{resetTargetUser.nome}</strong> (
+                <span className="font-mono text-[11px]">{resetTargetUser.email}</span>).
+              </p>
 
               {resetStatus.error && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium">
@@ -662,8 +762,8 @@ export const UsuariosView: React.FC = () => {
               )}
 
               {resetStatus.success && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 font-medium flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                   <span>{resetStatus.success}</span>
                 </div>
               )}
@@ -681,9 +781,9 @@ export const UsuariosView: React.FC = () => {
                     type="button"
                     disabled={resetStatus.loading}
                     onClick={handleExecuteResetPassword}
-                    className="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    className="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                   >
-                    {resetStatus.loading ? 'Enviando link...' : 'Enviar Link de Redefinição'}
+                    {resetStatus.loading ? 'Enviando e-mail...' : 'Enviar Instruções de Senha'}
                   </button>
                 )}
               </div>
@@ -696,22 +796,16 @@ export const UsuariosView: React.FC = () => {
       {userToDelete && (
         <div className="fixed inset-0 z-50 bg-[#111827]/40 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-sm rounded-xl shadow-xl border border-[#E5E7EB] overflow-hidden p-6 space-y-4">
-            <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
-              <Trash2 className="w-5 h-5" />
-            </div>
-            <div className="text-center">
-              <h3 className="text-sm font-bold text-[#111827]">Excluir Usuário</h3>
-              <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">
-                Tem certeza que deseja remover <strong>{userToDelete.nome}</strong>?
-                Esta operação remove o perfil e revoga os acessos correspondentes.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 pt-2">
+            <h3 className="text-sm font-bold text-red-600">Excluir Usuário</h3>
+            <p className="text-xs text-[#4B5563]">
+              Tem certeza que deseja excluir o usuário{' '}
+              <strong className="text-[#111827]">{userToDelete.nome}</strong>? Todas as atribuições associadas também serão removidas do Supabase.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
-                disabled={isDeleting}
                 onClick={() => setUserToDelete(null)}
-                className="flex-1 px-4 py-2 text-xs text-[#374151] hover:bg-[#F3F4F6] rounded-lg font-medium border border-[#E5E7EB] cursor-pointer"
+                className="px-4 py-2 text-xs text-[#6B7280] hover:bg-[#F3F4F6] rounded-lg font-medium cursor-pointer"
               >
                 Cancelar
               </button>
@@ -719,9 +813,9 @@ export const UsuariosView: React.FC = () => {
                 type="button"
                 disabled={isDeleting}
                 onClick={handleConfirmDelete}
-                className="flex-1 px-4 py-2 text-xs bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 text-xs bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg cursor-pointer disabled:opacity-50"
               >
-                {isDeleting ? 'Excluindo...' : 'Sim, Excluir'}
+                {isDeleting ? 'Excluindo...' : 'Confirmar Exclusão'}
               </button>
             </div>
           </div>

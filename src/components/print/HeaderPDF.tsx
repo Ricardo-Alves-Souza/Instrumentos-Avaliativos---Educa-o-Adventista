@@ -17,9 +17,12 @@ export const HeaderPDF: React.FC<HeaderPDFProps> = ({
   isContinuation = false,
 }) => {
   // Format turma title cleanly (e.g. "Turma 4º Ano A")
-  const formattedTurmaNome = turmaNome.toLowerCase().startsWith('turma')
-    ? turmaNome
-    : `Turma ${turmaNome}`;
+  const safeTurmaNome = turmaNome || '';
+  const formattedTurmaNome = safeTurmaNome.toLowerCase().startsWith('turma')
+    ? safeTurmaNome
+    : safeTurmaNome
+    ? `Turma ${safeTurmaNome}`
+    : 'Turma';
 
   if (isContinuation) {
     return (

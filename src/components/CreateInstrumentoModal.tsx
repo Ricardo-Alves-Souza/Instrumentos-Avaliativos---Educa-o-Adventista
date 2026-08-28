@@ -15,6 +15,8 @@ import {
   HelpCircle,
   CheckCircle2,
   FileCheck,
+  Building,
+  GraduationCap,
 } from 'lucide-react';
 import {
   InstrumentoAvaliativo,
@@ -108,17 +110,36 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
   } = useApp();
 
   const isProfessor = currentUser.role === 'PROFESSOR';
+  const isCoordOrAdminOrTI = currentUser.role === 'COORDENADOR' || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'TI';
 
-  // Turmas e Disciplinas disponíveis
+  // Turmas e Disciplinas disponíveis para o usuário
   const availableTurmas = isProfessor ? getProfessorTurmas(currentUser.id) : turmas;
   const availableDisciplinas = isProfessor ? getProfessorDisciplinas(currentUser.id) : disciplinas;
 
   const effectiveTurmas = availableTurmas.length > 0 ? availableTurmas : turmas;
   const effectiveDisciplinas = availableDisciplinas.length > 0 ? availableDisciplinas : disciplinas;
 
+  // Segmentos disponíveis nas turmas acessíveis
+  const availableSegmentsInEffective = useMemo(() => {
+    const list: { id: string; label: string }[] = [];
+    if (effectiveTurmas.some((t) => t.nivel === 'Ensino Fundamental I')) {
+      list.push({ id: 'Ensino Fundamental I', label: 'Fundamental I' });
+    }
+    if (effectiveTurmas.some((t) => t.nivel === 'Ensino Fundamental II')) {
+      list.push({ id: 'Ensino Fundamental II', label: 'Fundamental II' });
+    }
+    if (effectiveTurmas.some((t) => t.nivel === 'Ensino Médio')) {
+      list.push({ id: 'Ensino Médio', label: 'Ensino Médio' });
+    }
+    return list;
+  }, [effectiveTurmas]);
+
   // Estados do formulário
   const [selectedTurmas, setSelectedTurmas] = useState<InstrumentoTurmaEntrega[]>([]);
-  const [modalTurmaSegment, setModalTurmaSegment] = useState<string>('TODAS');
+  // Segment tab state (SEM a aba "Todas" - Requisito 9)
+  const [modalTurmaSegment, setModalTurmaSegment] = useState<string>(
+    availableSegmentsInEffective[0]?.id || 'Ensino Fundamental I'
+  );
   const [disciplinaId, setDisciplinaId] = useState<string>('');
   const [numero, setNumero] = useState<number | ''>('');
   const [codigoIdentificador, setCodigoIdentificador] = useState<string>('');
@@ -141,13 +162,17 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
 
   // Modal pós-salvamento: "Deseja cadastrar outro instrumento?"
   const [isPostSavePromptOpen, setIsPostSavePromptOpen] = useState(false);
-  const [postSaveType, setPostSaveType] = useState<'ENVIADO' | 'RASCUNHO' | 'SALVO'>('ENVIADO');
+  const [postSaveType, setPostSaveType] = useState<'ENVIADO' | 'RASCUNHO' | 'SALVO' | 'APROVADO'>('ENVIADO');
 
   // Inicialização / Reset
   const resetFormState = (preserveDefaults = true) => {
     if (initialInstrumento && preserveDefaults) {
       if (initialInstrumento.turmas && initialInstrumento.turmas.length > 0) {
         setSelectedTurmas(initialInstrumento.turmas);
+        const firstTurmaFull = effectiveTurmas.find((t) => t.id === initialInstrumento.turmas[0]?.turmaId);
+        if (firstTurmaFull?.nivel) {
+          setModalTurmaSegment(firstTurmaFull.nivel);
+        }
       } else {
         setSelectedTurmas([
           {
@@ -156,6 +181,10 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
             data: initialInstrumento.data || '',
           },
         ]);
+        const firstTurmaFull = effectiveTurmas.find((t) => t.id === initialInstrumento.turmaId);
+        if (firstTurmaFull?.nivel) {
+          setModalTurmaSegment(firstTurmaFull.nivel);
+        }
       }
       setDisciplinaId(initialInstrumento.disciplinaId);
       setNumero(initialInstrumento.numero);
@@ -181,6 +210,16 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
         ? [{ turmaId: defaultTurmaId, turmaNome: effectiveTurmas.find((t) => t.id === defaultTurmaId)?.nome || '', data: '' }]
         : [];
       setSelectedTurmas(initialTurmaList);
+
+      if (defaultTurmaId) {
+        const found = effectiveTurmas.find((t) => t.id === defaultTurmaId);
+        if (found?.nivel) {
+          setModalTurmaSegment(found.nivel);
+        }
+      } else if (availableSegmentsInEffective.length > 0) {
+        setModalTurmaSegment(availableSegmentsInEffective[0].id);
+      }
+
       setDisciplinaId(defaultDisciplinaId || (effectiveDisciplinas.length === 1 ? effectiveDisciplinas[0].id : ''));
       setNumero('');
       setCodigoIdentificador(tiposInstrumento.length > 0 ? tiposInstrumento[0].nome : 'AV1');
@@ -235,31 +274,20 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
   const handleCopyDateToAll = () => {
     if (selectedTurmas.length === 0) return;
     const firstDate = selectedTurmas[0].data;
-    if (!firstDate) return;
+    if (!firstDate) {
+      setErrorMessage('Defina a data da 1ª turma selecionada antes de replicar para as demais.');
+      return;
+    }
     setSelectedTurmas(selectedTurmas.map((t) => ({ ...t, data: firstDate })));
+    setSuccessMessage('Data da 1ª turma replicada para todas as turmas selecionadas.');
+    setTimeout(() => setSuccessMessage(null), 3000);
   };
 
-  // Segmentos disponíveis nas turmas acessíveis
-  const availableSegmentsInEffective = useMemo(() => {
-    const list: { id: string; label: string }[] = [];
-    if (effectiveTurmas.some((t) => t.nivel === 'Ensino Fundamental I')) {
-      list.push({ id: 'Ensino Fundamental I', label: 'Fundamental I' });
-    }
-    if (effectiveTurmas.some((t) => t.nivel === 'Ensino Fundamental II')) {
-      list.push({ id: 'Ensino Fundamental II', label: 'Fundamental II' });
-    }
-    if (effectiveTurmas.some((t) => t.nivel === 'Ensino Médio')) {
-      list.push({ id: 'Ensino Médio', label: 'Ensino Médio' });
-    }
-    return list;
-  }, [effectiveTurmas]);
-
+  // Turmas filtradas pelo segmento da aba atual (SEM ABA "TODAS")
   const filteredEffectiveTurmas = useMemo(() => {
-    if (modalTurmaSegment === 'TODAS' || availableSegmentsInEffective.length <= 1) {
-      return effectiveTurmas;
-    }
+    if (!modalTurmaSegment) return effectiveTurmas;
     return effectiveTurmas.filter((t) => t.nivel === modalTurmaSegment);
-  }, [effectiveTurmas, modalTurmaSegment, availableSegmentsInEffective]);
+  }, [effectiveTurmas, modalTurmaSegment]);
 
   const handleSelectAllInModalSegment = () => {
     const currentList = filteredEffectiveTurmas;
@@ -356,8 +384,8 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     };
   };
 
-  // Validação para Envio de Aprovação
-  const validateForApproval = (): boolean => {
+  // Validação para Envio ou Aprovação
+  const validateForSubmission = (): boolean => {
     setErrorMessage(null);
 
     if (selectedTurmas.length === 0) {
@@ -440,19 +468,19 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     return true;
   };
 
-  // Clique no botão "Enviar para Aprovação" -> Abre diálogo de confirmação
+  // Clique no botão de Enviar (Professor -> Diálogo de confirmação)
   const handleClickSubmitButton = () => {
-    if (!validateForApproval()) {
+    if (!validateForSubmission()) {
       return;
     }
     setIsApprovalConfirmOpen(true);
   };
 
-  // Executa o envio definitivo para aprovação
-  const handleConfirmSendForApproval = () => {
+  // Envio definitivo para aprovação (Professor -> Status: ENVIADO)
+  const handleConfirmSendForApproval = async () => {
     try {
       const payload = buildInstrumentPayload();
-      enviarParaAprovacao(payload);
+      await enviarParaAprovacao(payload);
       setIsApprovalConfirmOpen(false);
       setPostSaveType('ENVIADO');
       setIsPostSavePromptOpen(true);
@@ -462,8 +490,8 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     }
   };
 
-  // Salvar como rascunho a partir do modal ou botão direto
-  const handleSaveDraft = () => {
+  // Salvar como rascunho (Professor ou Coordenação -> Status: RASCUNHO)
+  const handleSaveDraft = async () => {
     setErrorMessage(null);
 
     if (selectedTurmas.length === 0) {
@@ -490,7 +518,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
 
     try {
       const payload = buildInstrumentPayload();
-      salvarRascunho(payload);
+      await salvarRascunho(payload);
       setIsApprovalConfirmOpen(false);
       setPostSaveType('RASCUNHO');
       setIsPostSavePromptOpen(true);
@@ -500,20 +528,36 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
     }
   };
 
-  // Salvamento direto (para admin/coord ou instrumentos já aprovados)
-  const handleSaveDirect = () => {
-    setErrorMessage(null);
+  // Salvar e Aprovar Diretamente (Coordenação / Super Admin / TI -> Status: APROVADO - Requisito 11)
+  const handleSaveAndApprove = async () => {
+    if (!validateForSubmission()) {
+      return;
+    }
+
     try {
       const payload = buildInstrumentPayload();
       if (initialInstrumento?.id) {
-        updateInstrumento({ ...initialInstrumento, ...payload } as InstrumentoAvaliativo);
+        await updateInstrumento({
+          ...initialInstrumento,
+          ...payload,
+          status: 'APROVADO',
+          motivoRejeicao: undefined,
+          aprovadoPor: currentUser.nome,
+          aprovadoEm: new Date().toISOString(),
+        } as InstrumentoAvaliativo);
       } else {
-        addInstrumento(payload as any);
+        await addInstrumento({
+          ...payload,
+          status: 'APROVADO',
+          motivoRejeicao: undefined,
+          aprovadoPor: currentUser.nome,
+          aprovadoEm: new Date().toISOString(),
+        } as any);
       }
-      setPostSaveType('SALVO');
+      setPostSaveType('APROVADO');
       setIsPostSavePromptOpen(true);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Erro ao salvar alterações.');
+      setErrorMessage(err.message || 'Erro ao salvar e aprovar instrumento.');
     }
   };
 
@@ -586,46 +630,22 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
         <div className="p-6 space-y-5 overflow-y-auto flex-1 text-xs">
           {/* Section 1: Turmas Vinculadas e Datas */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="font-bold text-slate-800 text-xs block">
-                  Turmas Vinculadas *
-                </label>
-                <p className="text-[11px] text-slate-500">
-                  {isProfessor
-                    ? 'Selecione uma ou mais turmas atribuídas a você para aplicar este instrumento.'
-                    : 'Selecione as turmas que realizarão este instrumento avaliativo.'}
-                </p>
-              </div>
-              {selectedTurmas.length > 1 && (
-                <button
-                  type="button"
-                  onClick={handleCopyDateToAll}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                  title="Aplica a data da primeira turma para todas as turmas selecionadas"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                  Copiar 1ª data para todas
-                </button>
-              )}
+            <div>
+              <label className="font-bold text-slate-800 text-xs block">
+                Turmas Vinculadas *
+              </label>
+              <p className="text-[11px] text-slate-500">
+                {isProfessor
+                  ? 'Selecione uma ou mais turmas atribuídas a você para aplicar este instrumento.'
+                  : 'Selecione as turmas que realizarão este instrumento avaliativo.'}
+              </p>
             </div>
 
-            {/* Segment Tabs if multiple segments are present */}
-            {availableSegmentsInEffective.length > 1 && (
+            {/* Segment Tabs (SEM a aba "Todas" - Requisito 9) */}
+            {availableSegmentsInEffective.length > 0 && (
               <div className="space-y-2 pt-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-1 p-0.5 bg-slate-200/80 rounded-lg">
-                    <button
-                      type="button"
-                      onClick={() => setModalTurmaSegment('TODAS')}
-                      className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-colors cursor-pointer ${
-                        modalTurmaSegment === 'TODAS'
-                          ? 'bg-white text-slate-900 shadow-xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Todas ({effectiveTurmas.length})
-                    </button>
                     {availableSegmentsInEffective.map((seg) => {
                       const segCount = effectiveTurmas.filter((t) => t.nivel === seg.id).length;
                       const isSegActive = modalTurmaSegment === seg.id;
@@ -637,7 +657,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
                           key={seg.id}
                           type="button"
                           onClick={() => setModalTurmaSegment(seg.id)}
-                          className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-colors cursor-pointer flex items-center gap-1.5 ${
+                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors cursor-pointer flex items-center gap-1.5 ${
                             isSegActive
                               ? 'bg-white text-slate-900 shadow-xs'
                               : 'text-slate-600 hover:text-slate-900'
@@ -658,9 +678,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
                       onClick={handleSelectAllInModalSegment}
                       className="text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
                     >
-                      {modalTurmaSegment === 'TODAS'
-                        ? 'Marcar Todas'
-                        : `Marcar ${availableSegmentsInEffective.find((s) => s.id === modalTurmaSegment)?.label || ''}`}
+                      Marcar {availableSegmentsInEffective.find((s) => s.id === modalTurmaSegment)?.label || 'Segmento'}
                     </button>
                     <span className="text-slate-300">·</span>
                     <button
@@ -703,21 +721,46 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
 
             {/* Data de Entrega Individual por Turma com input de data real */}
             {selectedTurmas.length > 0 && (
-              <div className="pt-3 border-t border-slate-200 space-y-2">
-                <label className="text-[11px] font-bold text-slate-700 block">
-                  Data de Entrega Individual por Turma *
-                </label>
+              <div className="pt-3 border-t border-slate-200 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-[11px] font-bold text-slate-700 block">
+                    Data de Entrega Individual por Turma * ({selectedTurmas.length} {selectedTurmas.length === 1 ? 'turma selecionada' : 'turmas selecionadas'})
+                  </label>
+
+                  {/* Replicar 1ª Data: Posicionamento visual ajustado (Requisito 10) */}
+                  {selectedTurmas.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleCopyDateToAll}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-md transition-all cursor-pointer shadow-2xs"
+                      title="Aplica a data da primeira turma para todas as turmas selecionadas"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Replicar 1ª Data para Todas</span>
+                    </button>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {selectedTurmas.map((st) => {
+                  {selectedTurmas.map((st, idx) => {
                     const isoDateVal = toDateInputValue(st.data);
                     return (
                       <div
                         key={st.turmaId}
-                        className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200 gap-2 hover:border-blue-300 transition-colors"
+                        className={`flex items-center justify-between p-2.5 bg-white rounded-lg border gap-2 transition-colors ${
+                          idx === 0 ? 'border-blue-300 ring-1 ring-blue-100' : 'border-slate-200 hover:border-blue-300'
+                        }`}
                       >
-                        <span className="font-semibold text-slate-800 truncate text-xs">
-                          {st.turmaNome}
-                        </span>
+                        <div className="flex items-center gap-1.5 truncate">
+                          {idx === 0 && (
+                            <span className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded shrink-0">
+                              1ª
+                            </span>
+                          )}
+                          <span className="font-semibold text-slate-800 truncate text-xs">
+                            {st.turmaNome}
+                          </span>
+                        </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <input
                             type="date"
@@ -758,192 +801,193 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Bimestre {isProfessor && '(Fixo no Atual)'}
+                Bimestre *
               </label>
-              <select
-                disabled={isProfessor}
-                value={isProfessor ? systemSettings.bimestreAtual : bimestre}
-                onChange={(e) => setBimestre(Number(e.target.value))}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 disabled:opacity-80 font-medium"
-              >
-                <option value={1}>1º Bimestre</option>
-                <option value={2}>2º Bimestre</option>
-                <option value={3}>3º Bimestre</option>
-                <option value={4}>4º Bimestre</option>
-              </select>
+              {isProfessor ? (
+                <div className="w-full text-xs border border-slate-200 bg-slate-100 rounded-lg p-2.5 text-slate-700 font-bold flex items-center justify-between">
+                  <span>{systemSettings.bimestreAtual}º Bimestre</span>
+                  <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-semibold">
+                    Vigente
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={bimestre}
+                  onChange={(e) => setBimestre(Number(e.target.value))}
+                  className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 focus:bg-white font-medium"
+                >
+                  <option value={1}>1º Bimestre</option>
+                  <option value={2}>2º Bimestre</option>
+                  <option value={3}>3º Bimestre</option>
+                  <option value={4}>4º Bimestre</option>
+                </select>
+              )}
             </div>
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Instrumento *
+                Instrumento Avaliativo *
               </label>
               <select
                 required
                 value={codigoIdentificador}
                 onChange={(e) => setCodigoIdentificador(e.target.value)}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 focus:bg-white font-bold"
+                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 focus:bg-white font-bold text-blue-700"
               >
-                <option value="">Selecione o instrumento...</option>
-                {tiposInstrumento.map((tipo) => (
-                  <option key={tipo.id} value={tipo.nome}>
-                    {tipo.nome}
+                {tiposInstrumento.map((item) => (
+                  <option key={item.id} value={item.nome}>
+                    {item.nome}
                   </option>
                 ))}
-                {codigoIdentificador &&
-                  !tiposInstrumento.some(
-                    (t) => t.nome.toUpperCase() === codigoIdentificador.toUpperCase()
-                  ) && (
-                    <option value={codigoIdentificador}>{codigoIdentificador}</option>
-                  )}
               </select>
             </div>
           </div>
 
-          {/* Section 3: Tipo / Nome e Pontuação */}
+          {/* Section 3: Tipo/Nome do Instrumento e Pontuação */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Tipo / Nome do Instrumento *
+                Tipo / Formato da Atividade *
               </label>
               <input
                 type="text"
                 required
                 value={tipoNome}
                 onChange={(e) => setTipoNome(e.target.value)}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 uppercase font-bold focus:bg-white"
-                placeholder="Ex: PESQUISA, PROVA ESCRITA, SEMINÁRIO, MAQUETE"
+                placeholder="Ex: PROVA ESCRITA, SEMINÁRIO, TRABALHO EM GRUPO"
+                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-medium"
               />
             </div>
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Peso / Nota Máx. (pts) *
+                Pontuação / Peso Máximo *
               </label>
               <input
                 type="number"
-                step="0.5"
+                step="0.1"
+                min="0.1"
+                max="100"
                 required
                 value={peso}
                 onChange={(e) => setPeso(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 font-bold focus:bg-white"
                 placeholder="Ex: 10.0"
+                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-bold"
               />
             </div>
           </div>
 
-          {/* Section 4: Conteúdo Cobrado & Fonte de Estudo (Auto-grow) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Conteúdo Cobrado *
-              </label>
-              <AutoResizeTextarea
-                rows={2}
-                required
-                value={conteudo}
-                onChange={(e) => setConteudo(e.target.value)}
-                placeholder="Ex: Capítulo 7 – Fungos, bactérias e ecossistemas..."
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 focus:bg-white leading-relaxed"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Fonte de Estudo / Material *
-              </label>
-              <AutoResizeTextarea
-                rows={2}
-                required
-                value={fonteEstudo}
-                onChange={(e) => setFonteEstudo(e.target.value)}
-                placeholder="Ex: Apostila bimestral páginas 50 a 65, anotações de aula..."
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 focus:bg-white leading-relaxed"
-              />
-            </div>
+          {/* Section 4: Conteúdos Curriculares */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              Conteúdo Curricular Cobrado *
+            </label>
+            <AutoResizeTextarea
+              required
+              value={conteudo}
+              onChange={(e) => setConteudo(e.target.value)}
+              placeholder="Descreva os tópicos, capítulos e conteúdos pedagógicos abordados neste instrumento..."
+              rows={3}
+              className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed"
+            />
           </div>
 
-          {/* Section 5: Desenvolvimento Pedagógico (Auto-grow) */}
+          {/* Section 5: Fontes de Estudo */}
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              Fontes de Estudo e Materiais de Apoio *
+            </label>
+            <AutoResizeTextarea
+              required
+              value={fonteEstudo}
+              onChange={(e) => setFonteEstudo(e.target.value)}
+              placeholder="Ex: Livro didático (capítulos 3 e 4), anotações do caderno, listas de exercícios complementares..."
+              rows={2}
+              className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed"
+            />
+          </div>
+
+          {/* Section 6: Desenvolvimento Pedagógico */}
           <div>
             <label className="block text-[11px] font-semibold text-slate-700 mb-1">
               Desenvolvimento Pedagógico da Atividade *
             </label>
             <AutoResizeTextarea
-              rows={3}
               required
               value={desenvolvimento}
               onChange={(e) => setDesenvolvimento(e.target.value)}
-              className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-slate-50 text-slate-800 focus:bg-white leading-relaxed"
-              placeholder="Descreva detalhadamente as etapas de execução da atividade, orientações aos alunos e critérios práticos..."
+              placeholder="Instruções de aplicação, dinâmica de execução, tempo estimado, critérios de entrega..."
+              rows={3}
+              className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed"
             />
           </div>
 
-          {/* Section 6: Critérios Avaliativos com Somatória e Auto-grow */}
-          <div className="border-t border-slate-200 pt-4">
-            <div className="flex items-center justify-between mb-2">
+          {/* Section 7: Critérios Avaliativos com Somatória */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <label className="text-xs font-bold text-slate-900 block">
-                  Critérios Avaliativos
+                <label className="font-bold text-slate-800 text-xs block">
+                  Critérios Avaliativos *
                 </label>
                 <p className="text-[11px] text-slate-500">
-                  Defina os critérios e a pontuação individual de cada item.
+                  Especifique os critérios de correção e a pontuação individual de cada um.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                {/* Somatória visível em tempo real */}
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 text-xs font-bold shadow-xs">
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-white rounded-lg border border-slate-200 shadow-2xs">
                   <Calculator className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Total: {somaCriteriosFormatada} pts</span>
+                  <span className="text-[11px] text-slate-500">Soma:</span>
+                  <strong className="text-xs text-blue-700 font-mono font-bold">
+                    {somaCriteriosFormatada} pts
+                  </strong>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleAddCriterio}
-                  className="text-[11px] text-blue-600 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200 hover:bg-blue-100 transition-colors"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5" /> Adicionar Critério
+                  <Plus className="w-3.5 h-3.5" />
+                  Adicionar Critério
                 </button>
               </div>
             </div>
 
             <div className="space-y-2">
-              {criterios.length === 0 && (
-                <div className="p-3 bg-slate-50 rounded-lg border border-dashed border-slate-300 text-center text-slate-500 italic">
-                  Nenhum critério adicionado. Clique em "+ Adicionar Critério" para cadastrar.
-                </div>
-              )}
               {criterios.map((crit, idx) => (
-                <div key={crit.id} className="flex items-start gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[11px] font-bold text-slate-400 w-5 text-center mt-2">
-                    {idx + 1}.
+                <div
+                  key={crit.id}
+                  className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs"
+                >
+                  <span className="w-6 h-6 rounded bg-slate-100 text-slate-700 font-bold text-[11px] flex items-center justify-center font-mono mt-0.5 shrink-0">
+                    {idx + 1}
                   </span>
                   <div className="flex-1">
-                    <AutoResizeTextarea
-                      rows={1}
-                      required
+                    <input
+                      type="text"
                       value={crit.descricao}
                       onChange={(e) => {
                         const updated = [...criterios];
                         updated[idx].descricao = e.target.value;
                         setCriterios(updated);
                       }}
-                      className="w-full text-xs border border-slate-300 rounded-md p-1.5 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="Descrição do critério avaliativo..."
+                      className="w-full text-xs border border-slate-300 rounded p-1.5 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Descrição do critério (ex: Clareza e coerência das respostas)..."
                     />
                   </div>
-                  <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                  <div className="w-24 shrink-0">
                     <input
                       type="text"
-                      required
                       value={crit.valorInput}
                       onChange={(e) => {
                         const updated = [...criterios];
                         updated[idx].valorInput = e.target.value;
                         setCriterios(updated);
                       }}
-                      className="w-20 text-xs border border-slate-300 rounded-md p-1.5 bg-white text-slate-800 font-bold text-center"
-                      placeholder="1,5"
+                      className="w-full text-xs border border-slate-300 rounded p-1.5 bg-white text-slate-800 text-center font-mono font-bold focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Pontos"
                     />
-                    <span className="text-[11px] text-slate-500 font-bold">pts</span>
                   </div>
                   <button
                     type="button"
@@ -958,42 +1002,49 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
             </div>
           </div>
 
-          {/* Section 7: Habilidades BNCC (Auto-grow) */}
-          <div className="border-t border-slate-200 pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <Award className="w-4 h-4 text-purple-600" />
-                Matriz de Habilidades (BNCC / Curricular)
-              </label>
+          {/* Section 8: Habilidades BNCC (Opcional) */}
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="font-bold text-slate-800 text-xs block">
+                  Habilidades BNCC (Opcional)
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Mapeie os códigos e descrições das habilidades contempladas.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={handleAddHabilidade}
-                className="text-[11px] text-purple-600 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200 hover:bg-purple-100 transition-colors"
+                className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 hover:text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" /> Adicionar Habilidade
+                <Plus className="w-3.5 h-3.5" />
+                Adicionar Habilidade
               </button>
             </div>
 
             <div className="space-y-2">
-              {habilidades.length === 0 && (
-                <p className="text-[11px] text-slate-400 italic">Nenhuma habilidade adicionada ainda (opcional).</p>
-              )}
               {habilidades.map((hab, idx) => (
-                <div key={hab.id} className="flex items-start gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <input
-                    type="text"
-                    value={hab.codigo}
-                    onChange={(e) => {
-                      const updated = [...habilidades];
-                      updated[idx].codigo = e.target.value.toUpperCase();
-                      setHabilidades(updated);
-                    }}
-                    className="w-28 text-xs font-mono font-bold border border-slate-300 rounded p-1.5 bg-white text-slate-800 uppercase shrink-0 mt-0.5"
-                    placeholder="Ex: EF04CI06"
-                  />
+                <div
+                  key={hab.id}
+                  className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-200 shadow-2xs"
+                >
+                  <div className="w-28 shrink-0">
+                    <input
+                      type="text"
+                      value={hab.codigo}
+                      onChange={(e) => {
+                        const updated = [...habilidades];
+                        updated[idx].codigo = e.target.value.toUpperCase();
+                        setHabilidades(updated);
+                      }}
+                      className="w-full text-xs border border-slate-300 rounded p-1.5 bg-white text-slate-800 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-purple-500"
+                      placeholder="Ex: EF04MA01"
+                    />
+                  </div>
                   <div className="flex-1">
-                    <AutoResizeTextarea
-                      rows={1}
+                    <input
+                      type="text"
                       value={hab.descricao}
                       onChange={(e) => {
                         const updated = [...habilidades];
@@ -1018,7 +1069,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
           </div>
         </div>
 
-        {/* Footer Actions */}
+        {/* Footer Actions: Fluxo de Aprovação diferenciado por perfil (Requisitos 11 e 12) */}
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
           <button
             type="button"
@@ -1029,47 +1080,42 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
           </button>
 
           <div className="flex items-center gap-2.5">
-            {(!initialInstrumento || initialInstrumento.status === 'RASCUNHO' || isProfessor) && (
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 rounded-lg shadow-xs cursor-pointer transition-colors"
-              >
-                <Save className="w-3.5 h-3.5 text-slate-500" />
-                Salvar Rascunho
-              </button>
-            )}
+            {/* Opção "Salvar como Rascunho" para todos */}
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 rounded-lg shadow-xs cursor-pointer transition-colors"
+            >
+              <Save className="w-3.5 h-3.5 text-slate-500" />
+              Salvar como Rascunho
+            </button>
 
-            {initialInstrumento && initialInstrumento.status === 'APROVADO' && !isProfessor ? (
+            {/* Ação Principal: Coordenação/Admin/TI -> "Salvar e Aprovar" (Requisito 11) */}
+            {isCoordOrAdminOrTI ? (
               <button
                 type="button"
-                onClick={handleSaveDirect}
+                onClick={handleSaveAndApprove}
                 className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-xs cursor-pointer transition-colors"
               >
-                <Save className="w-3.5 h-3.5" />
-                Salvar Alterações
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Salvar e Aprovar
               </button>
             ) : (
+              /* Ação Principal: Professor -> "Enviar para Aprovação" (Requisito 12) */
               <button
                 type="button"
                 onClick={handleClickSubmitButton}
                 className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-xs cursor-pointer transition-colors"
               >
                 <Send className="w-3.5 h-3.5" />
-                {initialInstrumento
-                  ? initialInstrumento.status === 'REJEITADO'
-                    ? 'Corrigir e Reenviar'
-                    : initialInstrumento.status === 'ENVIADO'
-                    ? 'Atualizar e Reenviar'
-                    : 'Enviar para Aprovação'
-                  : 'Enviar para Aprovação'}
+                {initialInstrumento?.status === 'REJEITADO' ? 'Corrigir e Reenviar' : 'Enviar para Aprovação'}
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* MODAL DE CONFIRMAÇÃO PARA ENVIO DE APROVAÇÃO */}
+      {/* MODAL DE CONFIRMAÇÃO PARA ENVIO DE APROVAÇÃO (PROFESSOR) */}
       {isApprovalConfirmOpen && (
         <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
@@ -1109,7 +1155,7 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer"
                 >
                   <Save className="w-3.5 h-3.5 text-slate-500" />
-                  Salvar como Rascunho
+                  Salvar Rascunho
                 </button>
                 <button
                   type="button"
@@ -1138,6 +1184,8 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
                 <h4 className="text-base font-bold text-slate-900">
                   {postSaveType === 'ENVIADO'
                     ? 'Instrumento Enviado com Sucesso!'
+                    : postSaveType === 'APROVADO'
+                    ? 'Instrumento Salvo e Aprovado com Sucesso!'
                     : postSaveType === 'RASCUNHO'
                     ? 'Rascunho Salvo com Sucesso!'
                     : 'Alterações Salvas com Sucesso!'}
@@ -1145,6 +1193,8 @@ export const CreateInstrumentoModal: React.FC<CreateInstrumentoModalProps> = ({
                 <p className="text-xs text-slate-600">
                   {postSaveType === 'ENVIADO'
                     ? 'O instrumento avaliativo foi submetido e está aguardando revisão da coordenação.'
+                    : postSaveType === 'APROVADO'
+                    ? 'O instrumento foi homologado e já está disponível para geração de PDF e acompanhamento.'
                     : 'Os dados foram guardados e continuam disponíveis para edição a qualquer momento.'}
                 </p>
               </div>

@@ -105,13 +105,19 @@ export const initialDisciplinas: Disciplina[] = [
 
 export const mockDisciplinas = initialDisciplinas;
 
-// 3. USERS (Super Admin, Coordenadores, Professores)
+// 3. USERS (Super Admin, TI, Coordenadores, Professores)
 export const initialUsers: User[] = [
   {
     id: 'user-admin',
     nome: 'Ricardo Alves de Souza',
     email: 'ricardo.souza@eaportal.org',
     role: 'SUPER_ADMIN',
+  },
+  {
+    id: 'user-ti',
+    nome: 'Equipe de Suporte e TI',
+    email: 'ti@eaportal.org',
+    role: 'TI',
   },
   {
     id: 'user-coord',

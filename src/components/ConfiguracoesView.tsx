@@ -78,7 +78,10 @@ export const ConfiguracoesView: React.FC = () => {
     }
   }, [systemSettings]);
 
-  const isAuthorized = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR';
+  const isAuthorized =
+    currentUser.role === 'SUPER_ADMIN' ||
+    currentUser.role === 'TI' ||
+    currentUser.role === 'COORDENADOR';
 
   const handleToggleSegment = (segId: SegmentoEscolar, value: boolean) => {
     setLiberados((prev) => ({

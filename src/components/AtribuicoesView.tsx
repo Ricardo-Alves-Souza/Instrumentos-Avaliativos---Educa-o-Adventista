@@ -19,6 +19,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { Atribuicao, Turma } from '../types';
 import { SearchableCombobox, ComboboxOption } from './SearchableCombobox';
+import { sortSeriesPedagogically } from '../utils/pedagogicalSort';
 
 type TurmaSegment = 'FUNDAMENTAL_1' | 'FUNDAMENTAL_2' | 'ENSINO_MEDIO';
 
@@ -59,7 +60,7 @@ export const AtribuicoesView: React.FC = () => {
     currentUser,
   } = useApp();
 
-  const isAuthorized = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR';
+  const isAuthorized = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'TI' || currentUser.role === 'COORDENADOR';
 
   // Modal / Form state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -107,7 +108,7 @@ export const AtribuicoesView: React.FC = () => {
       setSelectedDisciplinaIds([...atrib.disciplinaIds]);
       setSelectedTurmaIds([...atrib.turmaIds]);
     } else {
-      setSelectedProfessorId(professoresValidos[0]?.id || '');
+      setSelectedProfessorId(''); // Requisito: Campo "Selecione o Professor" deve iniciar vazio
       setSelectedDisciplinaIds([]);
       setSelectedTurmaIds([]);
     }
@@ -227,8 +228,8 @@ export const AtribuicoesView: React.FC = () => {
 
   const filteredAtribuicoes = validAtribuicoes.filter((a) => {
     const prof = users.find((u) => u.id === a.professorId);
-    const profName = prof ? prof.nome : a.professorNome;
-    return profName.toLowerCase().includes(searchProfList.toLowerCase());
+    const profName = prof ? prof.nome : (a.professorNome || '');
+    return (profName || '').toLowerCase().includes(searchProfList.toLowerCase());
   });
 
   return (
@@ -583,7 +584,8 @@ export const AtribuicoesView: React.FC = () => {
                         Nenhuma turma cadastrada neste segmento.
                       </div>
                     ) : (
-                      (Object.entries(groupedCurrentSegment) as [string, Turma[]][]).map(([serie, serieTurmas]) => {
+                      sortSeriesPedagogically(Object.keys(groupedCurrentSegment)).map((serie) => {
+                        const serieTurmas = groupedCurrentSegment[serie] || [];
                         const serieSelectedCount = serieTurmas.filter((t) =>
                           selectedTurmaIds.includes(t.id)
                         ).length;

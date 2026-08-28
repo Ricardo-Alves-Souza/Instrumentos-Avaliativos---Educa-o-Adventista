@@ -36,6 +36,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onSelectTab }) => {
     switch (role) {
       case 'SUPER_ADMIN':
         return 'Super Administrador';
+      case 'TI':
+        return 'Suporte / TI';
       case 'COORDENADOR':
         return 'Coordenador Pedagógico';
       case 'PROFESSOR':

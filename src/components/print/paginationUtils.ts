@@ -169,14 +169,16 @@ export function paginateTurmaDocument(params: PaginateParams): PageData[] {
     .filter((g) => g.items.length > 0)
     .map((g) => {
       const discObj = disciplinas.find(
-        (d) => d.id === g.discId || d.nome.toLowerCase() === g.discNome.toLowerCase()
+        (d) =>
+          d.id === g.discId ||
+          (d.nome && g.discNome && d.nome.toLowerCase() === g.discNome.toLowerCase())
       );
       const ordem = discObj?.ordem ?? 999;
       
       // Sort instruments by original número/código/data
       const sortedItems = g.items.sort((a, b) => {
         if (a.numero !== b.numero) return a.numero - b.numero;
-        return a.codigoIdentificador.localeCompare(b.codigoIdentificador);
+        return (a.codigoIdentificador || '').localeCompare(b.codigoIdentificador || '');
       });
 
       // Assign sequential number 1, 2, 3... for each approved item in this discipline

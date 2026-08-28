@@ -25,6 +25,7 @@ import { useApp } from '../context/AppContext';
 import { InstrumentoAvaliativo, InstrumentoStatus, Turma, Disciplina } from '../types';
 import { InstrumentoDetailModal } from './InstrumentoDetailModal';
 import { RejeitarModal } from './RejeitarModal';
+import { sortSeriesPedagogically } from '../utils/pedagogicalSort';
 
 interface DashboardViewProps {
   onNavigateToDocumentos?: (turmaId: string, bimestre: number) => void;
@@ -59,8 +60,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const isProfessor = currentUser.role === 'PROFESSOR';
   const accessibleTurmas = getAccessibleTurmas(currentUser);
   const accessibleDisciplinas = getAccessibleDisciplinas(currentUser);
+  const accessibleInstrumentos = getAccessibleInstrumentos(currentUser);
 
-  // Available unique series for the current user's accessible turmas
+  // Available unique series for the current user's accessible turmas (ordered pedagogically)
   const availableSeries = React.useMemo(() => {
     const list: string[] = [];
     accessibleTurmas.forEach((t) => {
@@ -68,7 +70,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         list.push(t.serie);
       }
     });
-    return list;
+    return sortSeriesPedagogically(list);
   }, [accessibleTurmas]);
 
   const seriesWithLevel = React.useMemo(() => {
@@ -81,14 +83,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     });
   }, [availableSeries, accessibleTurmas]);
 
-  // Filter state: Série first, then Turma
-  const [selectedSerie, setSelectedSerie] = useState<string>(
-    availableSeries[0] || ''
-  );
+  // Filter state: Starts at "TODAS" (Todas as Séries)
+  const [selectedSerie, setSelectedSerie] = useState<string>('TODAS');
 
-  // Turmas belonging exclusively to the selected series
+  // Turmas belonging to the selected series (or all accessible turmas if TODAS)
   const turmasDaSerie = React.useMemo(() => {
-    if (!selectedSerie) return [];
+    if (!selectedSerie || selectedSerie === 'TODAS') {
+      return accessibleTurmas;
+    }
     return accessibleTurmas.filter((t) => t.serie === selectedSerie);
   }, [accessibleTurmas, selectedSerie]);
 
@@ -102,33 +104,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedDetailInst, setSelectedDetailInst] = useState<InstrumentoAvaliativo | null>(null);
   const [rejectingInst, setRejectingInst] = useState<InstrumentoAvaliativo | null>(null);
 
-  // Sync selected series if current selection is invalid or user changes
-  useEffect(() => {
-    if (availableSeries.length > 0) {
-      if (!selectedSerie || !availableSeries.includes(selectedSerie)) {
-        setSelectedSerie(availableSeries[0]);
-      }
-    } else {
-      setSelectedSerie('');
-    }
-  }, [availableSeries, selectedSerie]);
-
   // Sync selected turma whenever selected series or available turmas for that series change
   useEffect(() => {
-    if (!selectedSerie || turmasDaSerie.length === 0) {
-      setSelectedTurmaId('');
-    } else if (selectedTurmaId !== 'TODAS' && !turmasDaSerie.some((t) => t.id === selectedTurmaId)) {
+    if (selectedTurmaId !== 'TODAS' && !turmasDaSerie.some((t) => t.id === selectedTurmaId)) {
       setSelectedTurmaId('TODAS');
     }
   }, [selectedSerie, turmasDaSerie, selectedTurmaId]);
 
   const handleSerieChange = (newSerie: string) => {
     setSelectedSerie(newSerie);
-    if (!newSerie) {
-      setSelectedTurmaId('');
-    } else {
-      setSelectedTurmaId('TODAS');
-    }
+    setSelectedTurmaId('TODAS');
   };
 
   const currentTurma = accessibleTurmas.find((t) => t.id === selectedTurmaId);
@@ -177,12 +162,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // ----------------------------------------------------
   // PROFESSOR DASHBOARD LOGIC
-  // Only show disciplines that ACTUALLY HAVE registered instruments
   // ----------------------------------------------------
   const professorInstruments = React.useMemo(() => {
-    if (!selectedSerie) return [];
-
-    return instrumentos.filter((inst) => {
+    return accessibleInstrumentos.filter((inst) => {
       if (inst.professorId !== currentUser.id) return false;
       if (inst.bimestre !== selectedBimestre) return false;
       if (statusFilter !== 'TODOS' && inst.status !== statusFilter) return false;
@@ -198,7 +180,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         );
       }
     });
-  }, [instrumentos, currentUser.id, selectedBimestre, statusFilter, selectedSerie, selectedTurmaId, turmasDaSerie]);
+  }, [accessibleInstrumentos, currentUser.id, selectedBimestre, statusFilter, selectedTurmaId, turmasDaSerie]);
 
   // Group professor instruments by Discipline
   const professorDisciplinasMap = new Map<string, { disciplina: Disciplina; instruments: InstrumentoAvaliativo[] }>();
@@ -229,22 +211,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   ).length;
 
   // ----------------------------------------------------
-  // COORDINATION / SUPER ADMIN DASHBOARD LOGIC
-  // Hierarchy: Serie -> Turma -> Disciplina -> Professor -> Instrumentos
+  // COORDINATION / SUPER ADMIN / TI DASHBOARD LOGIC
   // ----------------------------------------------------
   const coordFilteredTurmas = React.useMemo(() => {
-    if (!selectedSerie) return [];
     if (selectedTurmaId === 'TODAS') {
       return turmasDaSerie;
     }
     return turmasDaSerie.filter((t) => t.id === selectedTurmaId);
-  }, [selectedSerie, selectedTurmaId, turmasDaSerie]);
+  }, [selectedTurmaId, turmasDaSerie]);
 
   // Filter instruments for coordination
   const coordInstruments = React.useMemo(() => {
-    if (!selectedSerie) return [];
-
-    return instrumentos.filter((inst) => {
+    return accessibleInstrumentos.filter((inst) => {
       if (inst.bimestre !== selectedBimestre) return false;
       if (statusFilter !== 'TODOS' && inst.status !== statusFilter) return false;
 
@@ -252,7 +230,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         (t) => inst.turmaId === t.id || inst.turmas?.some((it) => it.turmaId === t.id)
       );
     });
-  }, [instrumentos, selectedBimestre, statusFilter, selectedSerie, coordFilteredTurmas]);
+  }, [accessibleInstrumentos, selectedBimestre, statusFilter, coordFilteredTurmas]);
 
   const coordTotalInsts = coordInstruments.length;
   const coordAguardando = coordInstruments.filter((i) => i.status === 'ENVIADO').length;
@@ -288,7 +266,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs text-slate-500 mt-0.5">
             {isProfessor
               ? `Status em tempo real dos seus instrumentos avaliativos no ${selectedBimestre}º Bimestre.`
-              : 'Acompanhe, revise e aprove os instrumentos avaliativos organizados por Turma, Disciplina e Professor.'}
+              : 'Acompanhe, revise e aprove os instrumentos avaliativos dentro do seu escopo pedagógico.'}
           </p>
         </div>
 
@@ -334,7 +312,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               onChange={(e) => handleSerieChange(e.target.value)}
               className="text-xs font-bold border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
             >
-              <option value="">Selecione uma Série...</option>
+              <option value="TODAS">Todas as Séries ({availableSeries.length})</option>
               {seriesWithLevel.map((item) => (
                 <option key={item.serie} value={item.serie}>
                   {item.serie} {item.nivel ? `(${item.nivel})` : ''}
@@ -343,42 +321,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </select>
           </div>
 
-          {/* 2. Turma Select (Activated only when a Serie is selected) */}
+          {/* 2. Turma Select */}
           <div className="flex flex-col gap-1 min-w-[220px]">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1">
-                <Building className="w-3 h-3 text-blue-600" />
-                2. Turma
-              </label>
-              {!selectedSerie && (
-                <span className="text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                  Aguardando Série
-                </span>
-              )}
-            </div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1">
+              <Building className="w-3 h-3 text-blue-600" />
+              2. Turma
+            </label>
             <select
               id="dashboard-filter-turma"
-              disabled={!selectedSerie || turmasDaSerie.length === 0}
               value={selectedTurmaId}
               onChange={(e) => setSelectedTurmaId(e.target.value)}
-              className={`text-xs font-bold border rounded-lg px-3 py-2 transition-all ${
-                !selectedSerie || turmasDaSerie.length === 0
-                  ? 'bg-slate-100/90 text-slate-400 border-slate-200 cursor-not-allowed opacity-75'
-                  : 'bg-slate-50 text-slate-800 border-slate-200 focus:bg-white focus:ring-2 focus:ring-blue-500/20 cursor-pointer'
-              }`}
+              className="text-xs font-bold border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
             >
-              {!selectedSerie ? (
-                <option value="">Selecione a série primeiro...</option>
-              ) : (
-                <>
-                  <option value="TODAS">Todas as Turmas do {selectedSerie}</option>
-                  {turmasDaSerie.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.nome} ({t.turno})
-                    </option>
-                  ))}
-                </>
-              )}
+              <option value="TODAS">
+                {selectedSerie === 'TODAS' ? 'Todas as Turmas' : `Todas as Turmas do ${selectedSerie}`} ({turmasDaSerie.length})
+              </option>
+              {turmasDaSerie.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.nome} ({t.turno})
+                </option>
+              ))}
             </select>
           </div>
 
@@ -440,7 +402,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </div>
 
-      {/* KPI Metrics Cards */}
+      {/* KPI Metrics Cards (Strictly scoped) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {/* Metric 1: Total */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
@@ -508,47 +470,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* ======================================================== */}
-      {/* PROFESSOR VIEW: STRICT Disciplina -> Instrumentos -> Status */}
+      {/* PROFESSOR VIEW: Strict Disciplina -> Instrumentos -> Status */}
       {/* ======================================================== */}
       {isProfessor ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-              {!selectedSerie
-                ? 'Status de Entrega por Disciplina'
+              {selectedSerie === 'TODAS'
+                ? `Status de Entrega por Disciplina — Todas as Séries · ${selectedBimestre}º Bimestre`
                 : selectedTurmaId === 'TODAS'
                 ? `Status de Entrega por Disciplina — ${selectedSerie} (Todas as Turmas) · ${selectedBimestre}º Bimestre`
                 : `Status de Entrega por Disciplina — ${currentTurma?.nome || selectedSerie} · ${selectedBimestre}º Bimestre`}
             </h2>
-            {selectedSerie && (
-              <span className="text-xs text-slate-500">
-                {professorDisciplineGroups.length} {professorDisciplineGroups.length === 1 ? 'disciplina com instrumentos' : 'disciplinas com instrumentos'}
-              </span>
-            )}
+            <span className="text-xs text-slate-500">
+              {professorDisciplineGroups.length} {professorDisciplineGroups.length === 1 ? 'disciplina com instrumentos' : 'disciplinas com instrumentos'}
+            </span>
           </div>
 
-          {!selectedSerie ? (
-            <div className="bg-white p-10 rounded-xl border border-dashed border-slate-300 text-center shadow-xs space-y-3">
-              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
-                <Layers className="w-6 h-6" />
-              </div>
-              <h3 className="text-sm font-bold text-slate-800">
-                Selecione uma série para visualizar seus instrumentos
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Escolha a série no filtro acima para carregar as turmas correspondentes e acompanhar os instrumentos avaliativos.
-              </p>
-            </div>
-          ) : professorDisciplineGroups.length === 0 ? (
+          {professorDisciplineGroups.length === 0 ? (
             <div className="bg-white p-10 rounded-xl border border-dashed border-slate-300 text-center shadow-xs space-y-3">
               <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
                 <BookOpen className="w-6 h-6" />
               </div>
               <h3 className="text-sm font-bold text-slate-800">
-                Nenhum instrumento avaliativo cadastrado para {selectedTurmaId === 'TODAS' ? `as turmas do ${selectedSerie}` : currentTurma?.nome} no {selectedBimestre}º Bimestre.
+                Nenhum instrumento avaliativo encontrado para os filtros selecionados no {selectedBimestre}º Bimestre.
               </h3>
               <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Você ainda não registrou nenhum instrumento avaliativo para esta seleção neste bimestre.
+                Você ainda não registrou instrumentos avaliativos para este recorte neste bimestre.
               </p>
               {canCreateInstrument() && onOpenCreateModal && (
                 <button
@@ -558,7 +506,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-all"
                 >
                   <Plus className="w-4 h-4" />
-                  Cadastrar Primeiro Instrumento
+                  Cadastrar Instrumento
                 </button>
               )}
             </div>
@@ -690,222 +638,208 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       ) : (
         /* ======================================================== */
-        /* COORDINATION / SUPER ADMIN VIEW: Turma -> Disciplina -> Professor -> Instrumentos */
+        /* COORDINATION / SUPER ADMIN / TI VIEW: Turma -> Disciplina -> Professor -> Instrumentos */
         /* ======================================================== */
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-              {!selectedSerie
-                ? 'Visão Hierárquica da Coordenação Pedagógica'
-                : `Visão Hierárquica da Coordenação Pedagógica — ${selectedSerie} (${selectedBimestre}º Bimestre)`}
+              {selectedSerie === 'TODAS'
+                ? `Visão da Coordenação — Todas as Séries (${selectedBimestre}º Bimestre)`
+                : `Visão da Coordenação — ${selectedSerie} (${selectedBimestre}º Bimestre)`}
             </h2>
-            {selectedSerie && (
-              <span className="text-xs text-slate-500 font-medium">
-                {coordInstruments.length} {coordInstruments.length === 1 ? 'instrumento filtrado' : 'instrumentos filtrados'}
-              </span>
-            )}
+            <span className="text-xs text-slate-500 font-medium">
+              {coordInstruments.length} {coordInstruments.length === 1 ? 'instrumento filtrado' : 'instrumentos filtrados'}
+            </span>
           </div>
 
-          {!selectedSerie ? (
-            <div className="bg-white p-10 rounded-xl border border-dashed border-slate-300 text-center shadow-xs space-y-3">
-              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
-                <Layers className="w-6 h-6" />
-              </div>
-              <h3 className="text-sm font-bold text-slate-800">
-                Selecione uma série para visualizar as turmas e instrumentos
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Selecione a série no filtro acima para que as turmas sejam ativadas e os instrumentos avaliativos sejam exibidos de forma organizada.
-              </p>
-            </div>
-          ) : coordFilteredTurmas.length === 0 ? (
+          {coordFilteredTurmas.length === 0 ? (
             <div className="bg-white p-10 rounded-xl border border-dashed border-slate-300 text-center shadow-xs space-y-3">
               <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto">
                 <Building className="w-6 h-6" />
               </div>
               <h3 className="text-sm font-bold text-slate-800">
-                Nenhuma turma encontrada para a série selecionada
+                Nenhuma turma encontrada para o filtro selecionado
               </h3>
             </div>
           ) : (
             coordFilteredTurmas.map((turma) => {
-            // Get instruments for this specific turma
-            const turmaInsts = coordInstruments.filter(
-              (inst) =>
-                inst.turmaId === turma.id ||
-                inst.turmas?.some((t) => t.turmaId === turma.id)
-            );
+              // Get instruments for this specific turma
+              const turmaInsts = coordInstruments.filter(
+                (inst) =>
+                  inst.turmaId === turma.id ||
+                  inst.turmas?.some((t) => t.turmaId === turma.id)
+              );
 
-            if (turmaInsts.length === 0 && selectedTurmaId === 'TODAS') {
-              // Don't clutter with empty classes when viewing all
-              return null;
-            }
-
-            // Group by discipline
-            const discMap = new Map<string, { disciplina: Disciplina; instruments: InstrumentoAvaliativo[] }>();
-            turmaInsts.forEach((inst) => {
-              const disc = disciplinas.find((d) => d.id === inst.disciplinaId) || {
-                id: inst.disciplinaId,
-                nome: inst.disciplinaNome,
-                codigo: '',
-                ordem: 99,
-              };
-              if (!discMap.has(disc.id)) {
-                discMap.set(disc.id, { disciplina: disc, instruments: [] });
+              if (turmaInsts.length === 0 && selectedTurmaId === 'TODAS') {
+                return null;
               }
-              discMap.get(disc.id)!.instruments.push(inst);
-            });
 
-            const disciplineGroups = Array.from(discMap.values()).sort(
-              (a, b) => (a.disciplina.ordem || 0) - (b.disciplina.ordem || 0)
-            );
+              // Group by discipline
+              const discMap = new Map<string, { disciplina: Disciplina; instruments: InstrumentoAvaliativo[] }>();
+              turmaInsts.forEach((inst) => {
+                const disc = disciplinas.find((d) => d.id === inst.disciplinaId) || {
+                  id: inst.disciplinaId,
+                  nome: inst.disciplinaNome,
+                  codigo: '',
+                  ordem: 99,
+                };
+                if (!discMap.has(disc.id)) {
+                  discMap.set(disc.id, { disciplina: disc, instruments: [] });
+                }
+                discMap.get(disc.id)!.instruments.push(inst);
+              });
 
-            return (
-              <div
-                key={turma.id}
-                className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden"
-              >
-                {/* Turma Header */}
-                <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Building className="w-5 h-5 text-blue-400" />
-                    <div>
-                      <h3 className="text-sm font-bold">{turma.nome}</h3>
-                      <p className="text-[11px] text-slate-400">
-                        {turma.nivel} · {turma.turno} · Ano Letivo {turma.anoLetivo}
-                      </p>
+              const disciplineGroups = Array.from(discMap.values()).sort(
+                (a, b) => (a.disciplina.ordem || 0) - (b.disciplina.ordem || 0)
+              );
+
+              return (
+                <div
+                  key={turma.id}
+                  className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden"
+                >
+                  {/* Turma Header */}
+                  <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Building className="w-5 h-5 text-blue-400" />
+                      <div>
+                        <h3 className="text-sm font-bold">{turma.nome}</h3>
+                        <p className="text-[11px] text-slate-400">
+                          {turma.nivel} · {turma.turno} · Ano Letivo {turma.anoLetivo}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-semibold bg-white/10 px-3 py-1 rounded-full text-slate-200">
+                        {turmaInsts.length} {turmaInsts.length === 1 ? 'instrumento' : 'instrumentos'}
+                      </span>
+                      {onNavigateToDocumentos && turmaInsts.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigateToDocumentos(turma.id, selectedBimestre)}
+                          className="text-xs font-bold text-blue-300 hover:text-white inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          PDF <ArrowRight className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold bg-white/10 px-3 py-1 rounded-full text-slate-200">
-                      {turmaInsts.length} {turmaInsts.length === 1 ? 'instrumento' : 'instrumentos'}
-                    </span>
-                    {onNavigateToDocumentos && turmaInsts.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => onNavigateToDocumentos(turma.id, selectedBimestre)}
-                        className="text-xs font-bold text-blue-300 hover:text-white inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        PDF <ArrowRight className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Turma Disciplines Breakdown */}
-                {disciplineGroups.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-slate-400 italic">
-                    Nenhum instrumento cadastrado para esta turma no {selectedBimestre}º Bimestre.
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-200">
-                    {disciplineGroups.map(({ disciplina, instruments }) => (
-                      <div key={disciplina.id} className="p-5 space-y-3">
-                        {/* Discipline Title */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center font-mono">
-                              {String(disciplina.ordem || 1).padStart(2, '0')}
+                  {/* Turma Disciplines Breakdown */}
+                  {disciplineGroups.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-slate-400 italic">
+                      Nenhum instrumento cadastrado para esta turma no {selectedBimestre}º Bimestre.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-200">
+                      {disciplineGroups.map(({ disciplina, instruments }) => (
+                        <div key={disciplina.id} className="p-5 space-y-3">
+                          {/* Discipline Title */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center font-mono">
+                                {String(disciplina.ordem || 1).padStart(2, '0')}
+                              </span>
+                              <h4 className="text-xs font-bold text-slate-900">
+                                {disciplina.nome}
+                              </h4>
+                            </div>
+                            <span className="text-[11px] text-slate-500 font-mono">
+                              {disciplina.codigo}
                             </span>
-                            <h4 className="text-xs font-bold text-slate-900">
-                              {disciplina.nome}
-                            </h4>
                           </div>
-                          <span className="text-[11px] text-slate-500 font-mono">
-                            {disciplina.codigo}
-                          </span>
-                        </div>
 
-                        {/* Instruments Table under Discipline */}
-                        <div className="space-y-2 pl-2">
-                          {instruments.map((inst) => {
-                            const deliveryDate = getDeliveryDateForTurma(inst, turma.id);
+                          {/* Instruments Table under Discipline */}
+                          <div className="space-y-2 pl-2">
+                            {instruments.map((inst) => {
+                              const deliveryDate = getDeliveryDateForTurma(inst, turma.id);
 
-                            return (
-                              <div
-                                key={inst.id}
-                                className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white transition-all gap-3"
-                              >
-                                <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-                                  <span className="font-mono font-bold text-xs bg-white text-blue-700 px-2 py-1 rounded border border-slate-200 shrink-0">
-                                    {inst.codigoIdentificador}
-                                  </span>
+                              return (
+                                <div
+                                  key={inst.id}
+                                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white transition-all gap-3"
+                                >
+                                  <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                                    <span className="font-mono font-bold text-xs bg-white text-blue-700 px-2 py-1 rounded border border-slate-200 shrink-0">
+                                      {inst.codigoIdentificador}
+                                    </span>
 
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="font-bold text-xs text-slate-900">
-                                        {inst.tipoNome}
-                                      </span>
-                                      {renderStatusBadge(inst.status)}
-                                    </div>
-                                    <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5 flex-wrap">
-                                      <span className="flex items-center gap-1 text-slate-700 font-semibold">
-                                        <User className="w-3 h-3 text-slate-400" />
-                                        {inst.professorNome || 'Professor não informado'}
-                                      </span>
-                                      <span>·</span>
-                                      <span className="font-mono">
-                                        Entrega: <strong>{deliveryDate}</strong>
-                                      </span>
-                                      <span>·</span>
-                                      <span>
-                                        Peso: <strong>{inst.peso?.toFixed(1)} pts</strong>
-                                      </span>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-bold text-xs text-slate-900">
+                                          {inst.tipoNome}
+                                        </span>
+                                        {renderStatusBadge(inst.status)}
+                                      </div>
+                                      <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5 flex-wrap">
+                                        <span className="flex items-center gap-1 text-slate-700 font-semibold">
+                                          <User className="w-3 h-3 text-slate-400" />
+                                          {inst.professorNome || 'Professor não informado'}
+                                        </span>
+                                        <span>·</span>
+                                        <span className="font-mono">
+                                          Entrega: <strong>{deliveryDate}</strong>
+                                        </span>
+                                        <span>·</span>
+                                        <span>
+                                          Peso: <strong>{inst.peso?.toFixed(1)} pts</strong>
+                                        </span>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
 
-                                {/* Quick Actions for Coordination */}
-                                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedDetailInst(inst)}
-                                    className="text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
-                                  >
-                                    Ver Detalhes
-                                  </button>
-
-                                  {inst.status === 'ENVIADO' && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() => setRejectingInst(inst)}
-                                        className="text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
-                                      >
-                                        Rejeitar
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => aprovarInstrumento(inst.id)}
-                                        className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                                      >
-                                        Aprovar
-                                      </button>
-                                    </>
-                                  )}
-
-                                  {inst.status === 'APROVADO' && (
+                                  {/* Quick Actions for Coordination */}
+                                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                                     <button
                                       type="button"
-                                      onClick={() => liberarParaModificacao(inst.id)}
-                                      className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                      onClick={() => setSelectedDetailInst(inst)}
+                                      className="text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
                                     >
-                                      Liberar p/ Edição
+                                      Ver Detalhes
                                     </button>
-                                  )}
+
+                                    {inst.status === 'ENVIADO' && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => setRejectingInst(inst)}
+                                          className="text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                        >
+                                          Rejeitar
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => aprovarInstrumento(inst.id)}
+                                          className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                        >
+                                          Aprovar
+                                        </button>
+                                      </>
+                                    )}
+
+                                    {inst.status === 'APROVADO' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => liberarParaModificacao(inst.id)}
+                                        className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                                      >
+                                        Liberar p/ Edição
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          }))}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       )}
 

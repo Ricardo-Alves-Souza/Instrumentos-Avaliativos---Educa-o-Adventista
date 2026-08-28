@@ -1,4 +1,4 @@
-export type UserRole = 'SUPER_ADMIN' | 'COORDENADOR' | 'PROFESSOR';
+export type UserRole = 'SUPER_ADMIN' | 'TI' | 'COORDENADOR' | 'PROFESSOR';
 
 export type SegmentoEscolar = 'FUNDAMENTAL_1' | 'FUNDAMENTAL_2' | 'ENSINO_MEDIO';
 

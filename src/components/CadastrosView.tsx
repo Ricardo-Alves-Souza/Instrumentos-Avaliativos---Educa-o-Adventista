@@ -116,7 +116,10 @@ export const CadastrosView: React.FC = () => {
   const [isDeletingTipo, setIsDeletingTipo] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
 
-  const isAuthorized = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR';
+  const isAuthorized =
+    currentUser.role === 'SUPER_ADMIN' ||
+    currentUser.role === 'TI' ||
+    currentUser.role === 'COORDENADOR';
 
   // Open Disciplina Modal for Create or Edit
   const handleOpenDiscModal = (disc?: Disciplina) => {
@@ -305,8 +308,8 @@ export const CadastrosView: React.FC = () => {
   // Filtered lists
   const filteredDisciplinas = disciplinas.filter(
     (d) =>
-      d.nome.toLowerCase().includes(searchDisc.toLowerCase()) ||
-      d.codigo.toLowerCase().includes(searchDisc.toLowerCase())
+      (d.nome || '').toLowerCase().includes(searchDisc.toLowerCase()) ||
+      (d.codigo || '').toLowerCase().includes(searchDisc.toLowerCase())
   );
 
   const activeSegmentObj = useMemo(() => {
@@ -322,8 +325,8 @@ export const CadastrosView: React.FC = () => {
     if (!term) return turmasInActiveSegment;
     return turmasInActiveSegment.filter(
       (t) =>
-        t.nome.toLowerCase().includes(term) ||
-        t.serie.toLowerCase().includes(term)
+        (t.nome || '').toLowerCase().includes(term) ||
+        (t.serie || '').toLowerCase().includes(term)
     );
   }, [turmasInActiveSegment, searchTurma]);
 

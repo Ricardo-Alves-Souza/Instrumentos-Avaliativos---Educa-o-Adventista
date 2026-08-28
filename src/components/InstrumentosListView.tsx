@@ -88,9 +88,9 @@ export const InstrumentosListView: React.FC<InstrumentosListViewProps> = ({
 
   const filtered = baseInstrumentos.filter((inst) => {
     const matchSearch =
-      inst.tipoNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inst.conteudo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inst.codigoIdentificador.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (inst.tipoNome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (inst.conteudo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (inst.codigoIdentificador || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (inst.professorNome && inst.professorNome.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchTurma =

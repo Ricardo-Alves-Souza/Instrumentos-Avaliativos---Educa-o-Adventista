@@ -278,7 +278,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           // Match existing user profile or check active status
-          const matchedUser = currentUsersList.find((u) => u.email.toLowerCase() === userEmail);
+          const matchedUser = currentUsersList.find((u) => (u.email || '').toLowerCase() === userEmail);
           if (matchedUser) {
             if (matchedUser.ativo === false) {
               await client.auth.signOut();
@@ -323,7 +323,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { data: authListener } = client.auth.onAuthStateChange(async (event, session) => {
           if (session?.user) {
             const email = session.user.email?.toLowerCase();
-            const existing = users.find((u) => u.email.toLowerCase() === email);
+            const existing = users.find((u) => (u.email || '').toLowerCase() === email);
             if (existing && existing.ativo === false) {
               await client.auth.signOut();
               setIsAuthenticated(false);
@@ -409,7 +409,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
           }
 
-          const foundProfile = users.find((u) => u.email.toLowerCase() === cleanEmail);
+          const foundProfile = users.find((u) => (u.email || '').toLowerCase() === cleanEmail);
           if (foundProfile) {
             if (foundProfile.ativo === false) {
               await client.auth.signOut();
@@ -445,7 +445,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Fallback mode (when Supabase credentials are still syncing)
-    const matched = users.find((u) => u.email.toLowerCase() === cleanEmail);
+    const matched = users.find((u) => (u.email || '').toLowerCase() === cleanEmail);
     if (matched) {
       if (matched.ativo === false) {
         return { success: false, error: 'Esta conta de usuário foi desativada pela administração.' };
@@ -495,11 +495,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const currentUser = impersonatedUser || baseUser;
   const originalAdminUser = isImpersonating ? baseUser : null;
 
-  // Impersonation Controls (Super Admin only)
+  // Impersonation Controls (Super Admin and TI)
   const startImpersonation = (professor: User) => {
-    if (baseUser.role !== 'SUPER_ADMIN') {
+    if (baseUser.role !== 'SUPER_ADMIN' && baseUser.role !== 'TI') {
       throw new Error(
-        'Acesso negado: Apenas o perfil Super Administrador possui permissão para visualizar o sistema como professor.'
+        'Acesso negado: Apenas os perfis Super Administrador e TI possuem permissão para visualizar o sistema como professor.'
       );
     }
     if (professor.role !== 'PROFESSOR') {
@@ -523,8 +523,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     initialAtrib?: { disciplinaIds: string[]; turmaIds: string[] },
     password?: string
   ): Promise<User> => {
-    if (baseUser.role === 'COORDENADOR' && userData.role === 'SUPER_ADMIN') {
-      throw new Error('Acesso negado: A Coordenação não possui permissão para criar contas de Super Administrador.');
+    if (baseUser.role === 'COORDENADOR' && (userData.role === 'SUPER_ADMIN' || userData.role === 'TI')) {
+      throw new Error('Acesso negado: A Coordenação não possui permissão para criar contas de Administrador ou TI.');
     }
     if (baseUser.role === 'PROFESSOR') {
       throw new Error('Acesso negado: Professores não podem cadastrar usuários.');
@@ -562,9 +562,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateUser = async (updatedUser: User) => {
     const existing = users.find((u) => u.id === updatedUser.id);
     if (baseUser.role === 'COORDENADOR') {
-      if (existing?.role === 'SUPER_ADMIN' || updatedUser.role === 'SUPER_ADMIN') {
+      if (
+        existing?.role === 'SUPER_ADMIN' ||
+        existing?.role === 'TI' ||
+        updatedUser.role === 'SUPER_ADMIN' ||
+        updatedUser.role === 'TI'
+      ) {
         throw new Error(
-          'Acesso negado: A Coordenação não possui permissão para alterar ou promover contas de Super Administrador.'
+          'Acesso negado: A Coordenação não possui permissão para alterar ou promover contas de Administrador ou TI.'
         );
       }
     }
@@ -589,8 +594,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteUser = async (id: string) => {
     const target = users.find((u) => u.id === id);
     if (baseUser.role === 'COORDENADOR') {
-      if (target?.role === 'SUPER_ADMIN') {
-        throw new Error('Acesso negado: A Coordenação não possui permissão para excluir contas de Super Administrador.');
+      if (target?.role === 'SUPER_ADMIN' || target?.role === 'TI') {
+        throw new Error('Acesso negado: A Coordenação não possui permissão para excluir contas de Administrador ou TI.');
       }
     }
     if (baseUser.role === 'PROFESSOR') {
@@ -620,10 +625,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     userId: string,
     email: string
   ): Promise<{ success: boolean; error?: string }> => {
-    if (baseUser.role !== 'SUPER_ADMIN') {
+    if (baseUser.role !== 'SUPER_ADMIN' && baseUser.role !== 'TI') {
       return {
         success: false,
-        error: 'Apenas o perfil Super Administrador possui permissão para solicitar redefinição de senhas.',
+        error: 'Apenas os perfis Super Administrador e TI possuem permissão para solicitar redefinição de senhas.',
       };
     }
 
@@ -656,13 +661,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     userId: string,
     ativo: boolean
   ): Promise<{ success: boolean; error?: string }> => {
-    if (baseUser.role !== 'SUPER_ADMIN' && baseUser.role !== 'COORDENADOR') {
+    if (baseUser.role !== 'SUPER_ADMIN' && baseUser.role !== 'TI' && baseUser.role !== 'COORDENADOR') {
       return { success: false, error: 'Acesso negado.' };
     }
 
     const targetUser = users.find((u) => u.id === userId);
-    if (targetUser?.role === 'SUPER_ADMIN' && baseUser.role !== 'SUPER_ADMIN') {
-      return { success: false, error: 'Não é permitido desativar o Super Admin.' };
+    if ((targetUser?.role === 'SUPER_ADMIN' || targetUser?.role === 'TI') && baseUser.role === 'COORDENADOR') {
+      return { success: false, error: 'Não é permitido desativar contas de Administrador ou TI.' };
     }
 
     const updated = { ...targetUser!, ativo };
@@ -851,15 +856,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ): Promise<InstrumentoAvaliativo> => {
     const newId = `inst-${Date.now()}`;
     const dateNow = new Date().toLocaleString('pt-BR');
+    
+    // Regra de segurança: Professores nunca podem criar diretamente com status APROVADO
+    let finalStatus = saveStatus;
+    if (currentUser.role === 'PROFESSOR' && finalStatus === 'APROVADO') {
+      finalStatus = 'ENVIADO';
+    }
+
+    const isDirectApproved = finalStatus === 'APROVADO' && (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'TI' || currentUser.role === 'COORDENADOR');
+
     const created: InstrumentoAvaliativo = {
       ...inst,
       id: newId,
-      status: saveStatus,
+      status: finalStatus,
       dataCriacao: inst.dataCriacao || dateNow,
-      dataEnvio: saveStatus === 'ENVIADO' ? dateNow : inst.dataEnvio,
+      dataEnvio: finalStatus === 'ENVIADO' ? dateNow : inst.dataEnvio,
+      dataAprovacao: isDirectApproved ? dateNow : inst.dataAprovacao,
+      coordenadorId: isDirectApproved ? currentUser.id : inst.coordenadorId,
+      coordenadorNome: isDirectApproved ? currentUser.nome : inst.coordenadorNome,
       historico: [
         {
-          status: saveStatus,
+          status: finalStatus,
           data: dateNow,
           usuarioNome: currentUser.nome,
           usuarioRole: currentUser.role,
@@ -880,8 +897,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     inst: InstrumentoAvaliativo,
     saveStatus?: InstrumentoStatus
   ) => {
-    const nextStatus = saveStatus || inst.status;
+    let nextStatus = saveStatus || inst.status;
     const dateNow = new Date().toLocaleString('pt-BR');
+
+    // Regra de segurança: Professores nunca podem definir status APROVADO
+    if (currentUser.role === 'PROFESSOR' && nextStatus === 'APROVADO') {
+      nextStatus = 'ENVIADO';
+    }
+
+    const isDirectApproved = nextStatus === 'APROVADO' && (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'TI' || currentUser.role === 'COORDENADOR');
 
     const historyItem = {
       status: nextStatus,
@@ -894,6 +918,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...inst,
       status: nextStatus,
       dataEnvio: nextStatus === 'ENVIADO' ? dateNow : inst.dataEnvio,
+      dataAprovacao: isDirectApproved ? dateNow : inst.dataAprovacao,
+      coordenadorId: isDirectApproved ? currentUser.id : inst.coordenadorId,
+      coordenadorNome: isDirectApproved ? currentUser.nome : inst.coordenadorNome,
+      motivoRejeicao: nextStatus === 'APROVADO' ? undefined : inst.motivoRejeicao,
       historico: [...(inst.historico || []), historyItem],
     };
 
@@ -939,7 +967,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const aprovarInstrumento = async (id: string) => {
     if (currentUser.role === 'PROFESSOR') {
-      throw new Error('Apenas coordenadores podem aprovar instrumentos.');
+      throw new Error('Apenas coordenadores e administradores podem aprovar instrumentos.');
     }
     const inst = instrumentos.find((i) => i.id === id);
     if (!inst) return;
@@ -973,7 +1001,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const rejeitarInstrumento = async (id: string, motivo: string) => {
     if (currentUser.role === 'PROFESSOR') {
-      throw new Error('Apenas coordenadores podem rejeitar instrumentos.');
+      throw new Error('Apenas coordenadores e administradores podem rejeitar instrumentos.');
     }
     const inst = instrumentos.find((i) => i.id === id);
     if (!inst) return;
@@ -1008,7 +1036,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const liberarParaModificacao = async (id: string) => {
     if (currentUser.role === 'PROFESSOR') {
-      throw new Error('Apenas coordenadores podem liberar instrumentos para modificação.');
+      throw new Error('Apenas coordenadores e administradores podem liberar instrumentos para modificação.');
     }
     const inst = instrumentos.find((i) => i.id === id);
     if (!inst) return;
@@ -1052,7 +1080,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const getAccessibleTurmas = (user: User = currentUser): Turma[] => {
-    if (user.role === 'SUPER_ADMIN') {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TI') {
       return turmas;
     }
     if (user.role === 'COORDENADOR') {
@@ -1069,14 +1097,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const getAccessibleDisciplinas = (user: User = currentUser): Disciplina[] => {
-    if (user.role === 'SUPER_ADMIN' || user.role === 'COORDENADOR') {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TI' || user.role === 'COORDENADOR') {
       return disciplinas;
     }
     return getProfessorDisciplinas(user.id);
   };
 
   const getAccessibleInstrumentos = (user: User = currentUser): InstrumentoAvaliativo[] => {
-    if (user.role === 'SUPER_ADMIN') {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TI') {
       return instrumentos;
     }
     if (user.role === 'COORDENADOR') {
@@ -1094,11 +1122,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const getAccessibleUsers = (user: User = currentUser): User[] => {
-    if (user.role === 'SUPER_ADMIN') {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TI') {
       return users;
     }
     if (user.role === 'COORDENADOR') {
-      return users.filter((u) => u.role !== 'SUPER_ADMIN');
+      return users.filter((u) => u.role !== 'SUPER_ADMIN' && u.role !== 'TI');
     }
     return [user];
   };
@@ -1132,7 +1160,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const canEditInstrument = (inst: InstrumentoAvaliativo): boolean => {
-    if (currentUser.role === 'SUPER_ADMIN') {
+    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'TI') {
       return true;
     }
     if (currentUser.role === 'COORDENADOR') {
@@ -1163,7 +1191,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const canCreateInstrument = (turma?: Turma | null): boolean => {
-    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR') {
+    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'TI' || currentUser.role === 'COORDENADOR') {
       return true;
     }
     if (currentUser.role === 'PROFESSOR') {
@@ -1180,7 +1208,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const canApproveOrReject = (): boolean => {
-    return currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'COORDENADOR';
+    return currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'TI' || currentUser.role === 'COORDENADOR';
   };
 
   const resetAllData = () => {
