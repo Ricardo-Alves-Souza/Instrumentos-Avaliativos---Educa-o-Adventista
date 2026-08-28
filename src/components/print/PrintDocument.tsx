@@ -43,7 +43,6 @@ export const PrintDocument: React.FC<PrintDocumentProps> = ({
         <div
           key={`${turmaNome}-page-${page.pageNumber}`}
           className="print-page-container w-full min-h-[297mm] bg-white shadow-[0_10px_30px_rgba(0,0,0,0.05)] border border-[#E5E7EB] rounded-lg p-10 sm:p-14 flex flex-col justify-between"
-          style={{ pageBreakBefore: pIdx > 0 ? 'always' : 'auto' }}
         >
           <div className="w-full">
             {/* Header: Full Institutional on Page 1, Compact on subsequent pages */}

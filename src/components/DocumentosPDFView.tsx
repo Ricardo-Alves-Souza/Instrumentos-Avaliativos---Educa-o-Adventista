@@ -519,7 +519,7 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
       {/* DOCUMENT PREVIEW WORKSPACE */}
       <main
         ref={previewScrollRef as any}
-        className="flex-1 overflow-y-auto overflow-x-auto p-6 lg:p-8 flex flex-col items-center bg-[#525659]/10"
+        className="pdf-preview-main flex-1 overflow-y-auto overflow-x-auto p-6 lg:p-8 flex flex-col items-center bg-[#525659]/10"
       >
         {/* Floating Zoom Control Toolbar */}
         <div className="no-print sticky top-0 z-30 mb-6 bg-white/95 backdrop-blur-xs px-4 py-2 rounded-xl shadow-md border border-[#E5E7EB] flex items-center gap-3">
@@ -579,11 +579,11 @@ export const DocumentosPDFView: React.FC<DocumentosPDFViewProps> = ({
           </div>
         ) : (
           <div
-            className="flex flex-col gap-8 transition-transform duration-150 origin-top pb-16"
+            className="print-sheets-list flex flex-col gap-8 transition-transform duration-150 origin-top pb-16"
             style={{ transform: `scale(${zoomScale / 100})` }}
           >
             {activeDocs.map((doc, idx) => (
-              <div key={doc.turma.id} className="relative">
+              <div key={doc.turma.id} className="print-doc-group relative">
                 {generationMode === 'batch' && (
                   <div className="no-print mb-2 flex items-center justify-between text-xs font-bold text-[#4B5563] px-1">
                     <span>
